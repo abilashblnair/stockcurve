@@ -122,7 +122,7 @@ All responses are JSON. Errors: `{ "error": "message" }` with a 4xx/5xx status. 
 | POST | `/api/build` | `{ settings, wallet, config, baseMint, name, symbol, uri }` | `{ tx, pool, lastValidBlockHeight, simulation }` |
 | GET | `/api/pool/<address>` | | `PoolSnapshot` |
 | GET | `/api/pool/<address>/trades` | | `{ trades[], pending }` |
-| GET | `/api/pool/<address>/chart` | `?tf=5m|15m|1h|4h|1d` | `{ pool, baseMint, isMigrated, candles[], note }` (on-chain candles) |
+| GET | `/api/pool/<address>/chart` | `?tf=` 5m, 15m, 1h, 4h or 1d | `{ pool, baseMint, isMigrated, candles[], note }` (on-chain candles) |
 | POST | `/api/trade/quote` | `{ pool, side, asset: SOL/USDC/STOCK, amount, slippageBps, route?: auto/dbc }` | `{ route, routeLabel, outAmount, minOut, priceImpactPct }` |
 | POST | `/api/trade/build` | quote body + `wallet` | quote + `{ tx, lastValidBlockHeight, simulation }` |
 | GET | `/api/balances` | `?wallet=&pool=` | `{ sol, usdc, stock, token }` |
