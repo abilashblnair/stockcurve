@@ -1,0 +1,38 @@
+# Runs next to Pewcake on the same host. Pewcake's Caddy terminates TLS for
+# stockcurve.pewcake.fun and proxies to this container over pewcake_default.
+services:
+  stockcurve:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "server.js"]
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      DATA_DIR: /data
+      NEXT_TELEMETRY_DISABLED: "1"
+      # The host has 1 GB RAM shared with Pewcake: cap the heap and the container.
+      NODE_OPTIONS: "--max-old-space-size=220"
+    mem_limit: 320m
+    volumes:
+      - ./dist:/app:ro
+      - data:/data
+    networks:
+      pewcake:
+        aliases: [stockcurve]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+volumes:
+  data:
+
+networks:
+  pewcake:
+    external: true
+    name: pewcake_default

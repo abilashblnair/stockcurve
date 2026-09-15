@@ -1,0 +1,21 @@
+node_modules
+.env
+keys/
+runs/
+.data/
+.next/
+next-env.d.ts
+tmp/
+*.tsbuildinfo
+.next-verify/
+.next-dist/
+dist/
+
+# local-only
+.env*
+!.env.example
+*.key
+*.pem
+keys/
+npm-debug.log*
+.DS_Store

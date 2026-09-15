@@ -1,0 +1,44 @@
+{
+  "name": "stockcurve",
+  "version": "1.0.0",
+  "description": "Launch desk for Meteora DBC pools quoted in tokenized stocks",
+  "scripts": {
+    "dev": "next dev -p 3120",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc -p . --noEmit",
+    "probe": "tsx scripts/probe.ts",
+    "simulate": "tsx scripts/simulate.ts",
+    "live": "tsx scripts/live.ts",
+    "agent": "tsx scripts/agent.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "@meteora-ag/dynamic-bonding-curve-sdk": "^1.5.12",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/wallet-adapter-base": "0.9.27",
+    "@solana/wallet-adapter-react": "0.15.39",
+    "@solana/web3.js": "^1.99.0",
+    "bn.js": "^5.2.5",
+    "dotenv": "^17.4.2",
+    "next": "15.5.25",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^26.5.1",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  },
+  "private": true,
+  "overrides": {
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "@solana/wallet-adapter-react": "0.15.39",
+    "@solana/wallet-adapter-base": "0.9.27"
+  }
+}
