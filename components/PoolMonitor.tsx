@@ -74,6 +74,7 @@ export default function PoolMonitor({ address, launched }: { address: string; la
   const [trades, setTrades] = useState<Trade[] | null>(null);
   const [pendingTx, setPendingTx] = useState(0);
   const [chartTab, setChartTab] = useState<"price" | "curve">("price");
+  const [chartKey, setChartKey] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +110,8 @@ export default function PoolMonitor({ address, launched }: { address: string; la
   const refreshAll = useCallback(() => {
     void load();
     setTimeout(() => void loadTrades(), 1500);
+    // Let the new swap be indexed, then redraw the candles.
+    setTimeout(() => setChartKey((k) => k + 1), 6000);
   }, [load, loadTrades]);
 
   useEffect(() => {
@@ -207,7 +210,7 @@ export default function PoolMonitor({ address, launched }: { address: string; la
               </div>
             </div>
             {chartTab === "price" ? (
-              <PoolChart address={s.address} trades={trades ?? []} usdPerStock={u} />
+              <PoolChart address={s.address} refreshKey={chartKey} />
             ) : curveUsd ? (
               <CurveChart points={s.curve.points} supply={s.curve.totalSupply} usdPerStock={curveUsd} stockSymbol={s.stock.symbol} current={s.isMigrated ? s.graduationRaise / s.stock.multiplier : s.quoteReserve / s.stock.multiplier} label="Pool curve" />
             ) : null}

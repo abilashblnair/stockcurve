@@ -29,7 +29,7 @@ xStocks use Token-2022's scaled UI amount to apply dividends and splits without 
 Tokenized stocks (xStocks) are not offered to US persons. The site says so in the footer. Stockcurve does not custody anything, but pools inherit the stock's eligibility rules.
 
 **Where do prices come from?**
-Stock USD prices: Jupiter's price API (cached 30 s). Pool prices: computed from the pool's sqrt price on chain. Chart: GeckoTerminal or DexScreener when they have indexed the pool, otherwise our own decoded swap events.
+Stock USD prices: Jupiter's price API (cached 30 s). Pool prices: computed from the pool's sqrt price on chain. Chart: GeckoTerminal USD candles when it has the pool (for graduated tokens, their DAMM v2 pool); otherwise candles built from the pool's own swap events at the pool price after each trade.
 
 ## About the mechanics
 
@@ -45,7 +45,9 @@ Stock USD prices: Jupiter's price API (cached 30 s). Pool prices: computed from 
 
 **Is the token metadata editable?** No. Stockcurve creates tokens with immutable metadata so holders know the name and links cannot change.
 
-**Why does the chart sometimes say it will appear later?** GeckoTerminal and DexScreener index a new pool after its first trades, usually within minutes (DexScreener indexed PRINT within the hour). Until then the "On-chain trades" chart draws prices from the swaps we decode ourselves.
+**Why is the chart not a DexScreener embed?** DexScreener indexes these pools but cannot price a pair quoted in an xStock in USD, so its embedded chart stays on "Loading pair…" forever. Stockcurve draws its own candlestick chart instead: GeckoTerminal candles when available, fetched from your browser, or candles built from the pool's own swaps. The GeckoTerminal and DexScreener links below the chart still open those sites.
+
+**Why does a graduated pool's chart show a different pool address?** After graduation the bonding-curve pool stops trading. The chart follows the token to its most liquid pool, normally the DAMM v2 pool created at migration.
 
 **Why Jupiter for trades?** It lets people pay with SOL or USDC in one transaction (SOL → stock → curve) and routes to DAMM v2 after graduation. For a pool Jupiter has not indexed yet, the trade box has a direct curve swap option paid in the stock.
 

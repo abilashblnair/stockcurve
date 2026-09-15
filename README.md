@@ -13,7 +13,7 @@ Configure, launch, trade and monitor Meteora Dynamic Bonding Curve pools whose q
 | `/pools` | Index of every DBC pool quoted in a supported stock, scanned from the program on mainnet and cached to `.data/` |
 | `/how-it-works` | Why each setting exists |
 
-Pool pages also have a buy/sell box (SOL, USDC or the stock; Jupiter first, direct curve fallback), a fee claim button for the pool owner, and a live price chart (GeckoTerminal / DexScreener / on-chain trades). `npm run agent` drives the same API from a keypair (see docs/09-agent-api.md).
+Pool pages also have a buy/sell box (SOL, USDC or the stock; Jupiter first, direct curve fallback), a fee claim button for the pool owner, and a candlestick price chart (GeckoTerminal candles from the browser, following graduated tokens to DAMM v2, or candles from the pool's own swaps). `npm run agent` drives the same API from a keypair (see docs/09-agent-api.md).
 
 API: `/api/stocks`, `/api/preview`, `/api/build`, `/api/metadata` (+ `/meta/[id]`), `/api/pool/[address]`, `/api/pools`, `/api/rpc` (allow-listed proxy so the RPC key stays server-side).
 

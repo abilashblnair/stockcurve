@@ -16,7 +16,7 @@ flowchart LR
   end
   RPC[Helius RPC]
   JUP[Jupiter<br/>price + swap]
-  EXT[GeckoTerminal /<br/>DexScreener]
+  EXT[GeckoTerminal API<br/>candles]
   DBC[(Meteora DBC program)]
 
   UI -- "settings, wallet pubkey" --> API
@@ -28,7 +28,7 @@ flowchart LR
   IDX --> RPC
   IDX --> META
   API --> META
-  UI -- chart iframe --> EXT
+  UI -- candles (from the browser) --> EXT
 ```
 
 Design rules:
@@ -50,13 +50,15 @@ Design rules:
 | `lib/server/curve.ts` | Curve sampling, fee schedule, SDK validation |
 | `lib/server/launch.ts` | Preview and build of the create-config-and-pool transaction |
 | `lib/server/trade.ts` | Quotes and swap transactions (Jupiter or direct DBC), balances, fee claims |
-| `lib/server/pool.ts` | Pool snapshot, decoded trades, chart-source detection |
+| `lib/server/pool.ts` | Pool snapshot, decoded trades (execution and post-trade spot price) |
+| `lib/server/chart.ts` | On-chain candles for pools GeckoTerminal has not indexed |
+| `lib/client/gecko.ts` | GeckoTerminal candles and graduated-pool lookup, called from the browser |
 | `lib/server/indexer.ts` | Background scan of all stock-quoted pools; instant tracking of new launches |
 | `lib/server/metadata.ts` | Content-addressed token metadata storage |
 | `components/Builder.tsx` | Config builder UI and launch flow |
 | `components/PoolMonitor.tsx` | Pool page, fee claim |
 | `components/TradePanel.tsx` | Buy / sell |
-| `components/PoolChart.tsx` | GeckoTerminal / DexScreener embed, on-chain fallback chart |
+| `components/PoolChart.tsx` | Candlestick chart (lightweight-charts), timeframes, source selection |
 | `components/PoolTable.tsx` | Index table |
 | `scripts/probe.ts`, `simulate.ts`, `live.ts` | Go/no-go feasibility scripts |
 | `scripts/agent.ts` | Agent CLI over the public API |
@@ -98,7 +100,9 @@ sequenceDiagram
 
 - `GET /api/pool/<address>`: snapshot (pool state, config, stock info, metadata, curve model, fee now). Cached 4 s server-side so many viewers cost one RPC read.
 - `GET /api/pool/<address>/trades`: last 20 pool transactions, swap events decoded from DBC's `emit_cpi` inner instructions. Parsed transactions are memoised by signature; slow RPC lookups run in the background and the endpoint answers within ~2.5 s.
-- `GET /api/pool/<address>/market`: whether GeckoTerminal and DexScreener have indexed the pool (cached 5 min).
+- Price chart: the browser asks `GET /api/pool/<address>/chart?tf=` for on-chain candles and pool details, then asks GeckoTerminal directly for USD candles. For a graduated pool it first looks up the token's most liquid non-DBC pool (its DAMM v2 successor) and charts that. GeckoTerminal candles win when they are at least as recent as the last on-chain swap; otherwise the on-chain candles are shown. On-chain candles use each swap's post-trade pool price (`next_sqrt_price` in the event), anchored at the curve's start price and the current price, converted at today's stock price.
+
+  Why not embeds: DexScreener indexes these pools but has no USD price for xStock-quoted pairs, so its embed never finishes loading; and GeckoTerminal's free API throttles the server's IP (shared with Pewcake), while browsers each get their own allowance (CORS is open).
 
 ### Index
 
@@ -118,7 +122,7 @@ All responses are JSON. Errors: `{ "error": "message" }` with a 4xx/5xx status. 
 | POST | `/api/build` | `{ settings, wallet, config, baseMint, name, symbol, uri }` | `{ tx, pool, lastValidBlockHeight, simulation }` |
 | GET | `/api/pool/<address>` | | `PoolSnapshot` |
 | GET | `/api/pool/<address>/trades` | | `{ trades[], pending }` |
-| GET | `/api/pool/<address>/market` | | `{ gecko, dexscreener }` |
+| GET | `/api/pool/<address>/chart` | `?tf=5m|15m|1h|4h|1d` | `{ pool, baseMint, isMigrated, candles[], note }` (on-chain candles) |
 | POST | `/api/trade/quote` | `{ pool, side, asset: SOL/USDC/STOCK, amount, slippageBps, route?: auto/dbc }` | `{ route, routeLabel, outAmount, minOut, priceImpactPct }` |
 | POST | `/api/trade/build` | quote body + `wallet` | quote + `{ tx, lastValidBlockHeight, simulation }` |
 | GET | `/api/balances` | `?wallet=&pool=` | `{ sol, usdc, stock, token }` |

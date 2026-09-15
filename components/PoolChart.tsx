@@ -1,96 +1,161 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { MarketLinks, Trade } from "@/lib/server/pool";
-import { ago, tiny, usd } from "@/lib/format";
+import { useEffect, useRef, useState } from "react";
+import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import type { Candle, ChartData, Timeframe } from "@/lib/server/chart";
+import { geckoCandles, successorPool } from "@/lib/client/gecko";
 
-type Source = "gecko" | "dexscreener" | "trades";
+type View = { source: "geckoterminal" | "onchain"; candles: Candle[]; note: string | null; chartPool: string };
+import { usd } from "@/lib/format";
 
-function prefersDark() {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+const TIMEFRAMES: Timeframe[] = ["5m", "15m", "1h", "4h", "1d"];
+
+function cssVar(name: string, fallback: string) {
+  if (typeof window === "undefined") return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
-/** Price from our own decoded swaps, for pools no chart site has indexed yet. */
-function TradesChart({ trades, usdPerStock }: { trades: Trade[]; usdPerStock: number | null }) {
-  const pts = trades.filter((t) => t.time && t.price > 0).sort((a, b) => a.time! - b.time!);
-  if (pts.length < 2) {
-    return <div className="note small" style={{ minHeight: 120, display: "grid", placeItems: "center", textAlign: "center" }}>The price chart appears after a couple of trades. GeckoTerminal and DexScreener usually index a new pool within minutes of its first trades.</div>;
-  }
-  const W = 560, H = 220, P = { l: 64, r: 12, t: 12, b: 28 };
-  const conv = (p: number) => (usdPerStock ? p * usdPerStock : p);
-  const t0 = pts[0].time!, t1 = pts.at(-1)!.time!;
-  const ys = pts.map((p) => conv(p.price));
-  const yMin = Math.min(...ys) * 0.98, yMax = Math.max(...ys) * 1.02;
-  const sx = (t: number) => P.l + ((t - t0) / Math.max(1, t1 - t0)) * (W - P.l - P.r);
-  const sy = (y: number) => H - P.b - ((y - yMin) / Math.max(1e-30, yMax - yMin)) * (H - P.t - P.b);
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${sx(p.time!).toFixed(1)},${sy(conv(p.price)).toFixed(1)}`).join(" ");
-  const label = (v: number) => (usdPerStock ? usd(v) : tiny(v));
-  return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Trade prices from ${label(ys[0])} to ${label(ys.at(-1)!)}`}>
-      {[0, 0.5, 1].map((f) => (
-        <g key={f}>
-          <line className="grid" x1={P.l} x2={W - P.r} y1={sy(yMin + (yMax - yMin) * f)} y2={sy(yMin + (yMax - yMin) * f)} />
-          <text x={P.l - 8} y={sy(yMin + (yMax - yMin) * f) + 4} textAnchor="end">{label(yMin + (yMax - yMin) * f)}</text>
-        </g>
-      ))}
-      <path className="line" d={d} />
-      {pts.map((p) => (
-        <circle key={p.signature + p.time} cx={sx(p.time!)} cy={sy(conv(p.price))} r={3} fill={p.side === "buy" ? "var(--accent)" : "var(--down)"} />
-      ))}
-      <text x={P.l} y={H - 8}>{ago(t0)}</text>
-      <text x={W - P.r} y={H - 8} textAnchor="end">{ago(t1)}</text>
-    </svg>
-  );
-}
+/** Candlestick price chart (USD) drawn locally with TradingView's open-source lightweight-charts. */
+export default function PoolChart({ address, refreshKey }: { address: string; refreshKey?: number }) {
+  const box = useRef<HTMLDivElement>(null);
+  const chart = useRef<IChartApi | null>(null);
+  const candles = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volume = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const [tf, setTf] = useState<Timeframe>("15m");
+  const [data, setData] = useState<View | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-export default function PoolChart({ address, trades, usdPerStock }: { address: string; trades: Trade[]; usdPerStock: number | null }) {
-  const [links, setLinks] = useState<MarketLinks | null>(null);
-  const [source, setSource] = useState<Source | null>(null);
-  const [dark, setDark] = useState(false);
-
+  // Create the chart once.
   useEffect(() => {
-    setDark(prefersDark());
-    let alive = true;
-    const load = () =>
-      fetch(`/api/pool/${address}/market`).then((r) => r.json()).then((j: MarketLinks) => {
-        if (!alive) return;
-        setLinks(j);
-        setSource((cur) => cur ?? (j.gecko ? "gecko" : j.dexscreener ? "dexscreener" : "trades"));
-        // Not indexed yet: look again in a few minutes.
-        if (!j.gecko && !j.dexscreener) setTimeout(load, 5 * 60_000);
-      }).catch(() => alive && setSource((cur) => cur ?? "trades"));
-    load();
-    return () => { alive = false; };
-  }, [address]);
+    if (!box.current) return;
+    const up = cssVar("--accent", "#0b7a53");
+    const down = cssVar("--down", "#b83a26");
+    const c = createChart(box.current, {
+      autoSize: true,
+      height: 340,
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: cssVar("--muted", "#6d7179"), fontFamily: cssVar("--mono", "monospace"), fontSize: 11, attributionLogo: true },
+      grid: { vertLines: { color: cssVar("--line", "#e0dcd2") }, horzLines: { color: cssVar("--line", "#e0dcd2") } },
+      rightPriceScale: { borderColor: cssVar("--line-2", "#cfcabd") },
+      timeScale: { borderColor: cssVar("--line-2", "#cfcabd"), timeVisible: true, secondsVisible: false },
+      crosshair: { mode: CrosshairMode.Normal },
+      localization: { priceFormatter: (p: number) => usd(p) },
+    });
+    candles.current = c.addSeries(CandlestickSeries, {
+      upColor: up,
+      downColor: down,
+      borderUpColor: up,
+      borderDownColor: down,
+      wickUpColor: up,
+      wickDownColor: down,
+      priceFormat: { type: "custom", formatter: (p: number) => usd(p), minMove: 1e-12 },
+    });
+    volume.current = c.addSeries(HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" }, color: cssVar("--line-2", "#cfcabd") });
+    c.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    chart.current = c;
+    return () => {
+      c.remove();
+      chart.current = null;
+    };
+  }, []);
 
-  const gecko = `https://www.geckoterminal.com/solana/pools/${address}?embed=1&info=0&swaps=0&grayscale=0&light_chart=${dark ? 0 : 1}&chart_type=price&resolution=15m`;
-  const dexs = `https://dexscreener.com/solana/${address}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=${dark ? "dark" : "light"}&theme=${dark ? "dark" : "light"}&chartStyle=1&chartType=usd&interval=15`;
+  // Load candles for the timeframe; refresh every minute (and after trades).
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/pool/${address}/chart?tf=${tf}`, { cache: "no-store" });
+        const server: ChartData & { error?: string } = await r.json();
+        if (!r.ok) throw new Error(server.error ?? "Chart unavailable");
+        const onchain: View = { source: "onchain", candles: server.candles, note: server.note, chartPool: address };
+        let view: View = onchain;
+        try {
+          // GeckoTerminal from this browser; after graduation, follow the token to the pool it trades in now.
+          let chartPool = address;
+          let note: string | null = null;
+          if (server.isMigrated) {
+            const succ = await successorPool(server.baseMint);
+            if (succ) {
+              chartPool = succ.address;
+              note = `Graduated: showing the ${succ.dex === "meteora-damm-v2" ? "DAMM v2" : succ.dex} pool where it trades now.`;
+            }
+          }
+          const gc = await geckoCandles(chartPool, tf);
+          // GeckoTerminal lags on brand-new pools; keep our on-chain candles when they are more recent.
+          const lastSwap = [...server.candles].reverse().find((c) => c.volume > 0)?.time ?? 0;
+          const fresh = gc.length > 0 && gc[gc.length - 1].time >= lastSwap;
+          if (fresh || (server.isMigrated && gc.length)) view = { source: "geckoterminal", candles: gc, note, chartPool };
+          else if (server.isMigrated) view = { source: "geckoterminal", candles: [], note: note ?? "No candles yet for the graduated pool.", chartPool };
+        } catch {
+          if (server.isMigrated) view = { source: "geckoterminal", candles: [], note: "GeckoTerminal is rate-limiting this browser; the chart retries in a minute.", chartPool: address };
+        }
+        if (!alive) return;
+        setData(view);
+        setError(null);
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : "Chart unavailable");
+      } finally {
+        if (alive) setLoading(false);
+        if (alive) timer = setTimeout(load, 60_000);
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [address, tf, refreshKey]);
+
+  // Push data into the chart.
+  useEffect(() => {
+    if (!data || !candles.current || !volume.current || !chart.current) return;
+    const up = cssVar("--accent", "#0b7a53");
+    const down = cssVar("--down", "#b83a26");
+    candles.current.setData(data.candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close })));
+    volume.current.setData(
+      data.candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.volume, color: `${c.close >= c.open ? up : down}55` })),
+    );
+    chart.current.timeScale().fitContent();
+  }, [data]);
+
+  const last = data?.candles.at(-1);
+  const first = data?.candles[0];
+  const change = last && first && first.open > 0 ? ((last.close - first.open) / first.open) * 100 : null;
 
   return (
     <div className="stack-sm">
       <div className="spread">
-        <div className="seg" role="group" aria-label="Chart source">
-          <button type="button" aria-pressed={source === "gecko"} disabled={!links?.gecko} onClick={() => setSource("gecko")} title={links && !links.gecko ? "Not indexed on GeckoTerminal yet" : undefined}>GeckoTerminal</button>
-          <button type="button" aria-pressed={source === "dexscreener"} disabled={!links?.dexscreener} onClick={() => setSource("dexscreener")} title={links && !links.dexscreener ? "Not indexed on DexScreener yet" : undefined}>DexScreener</button>
-          <button type="button" aria-pressed={source === "trades"} onClick={() => setSource("trades")}>On-chain trades</button>
+        <div className="seg" role="group" aria-label="Timeframe">
+          {TIMEFRAMES.map((t) => (
+            <button key={t} type="button" aria-pressed={tf === t} onClick={() => setTf(t)}>{t}</button>
+          ))}
         </div>
-        {source === "gecko" && <a className="tiny muted" href={`https://www.geckoterminal.com/solana/pools/${address}`} target="_blank" rel="noreferrer">Open on GeckoTerminal ↗</a>}
-        {source === "dexscreener" && <a className="tiny muted" href={`https://dexscreener.com/solana/${address}`} target="_blank" rel="noreferrer">Open on DexScreener ↗</a>}
+        <div className="hstack tiny muted" style={{ gap: 10 }}>
+          {last && <span className="mono">{usd(last.close)}{change !== null && <span className={change >= 0 ? "trade-buy" : "trade-sell"}> {change >= 0 ? "+" : ""}{change.toFixed(1)}%</span>}</span>}
+          {loading && <span>loading…</span>}
+        </div>
       </div>
-      {source === null ? (
-        <div className="skeleton" style={{ height: 360 }} />
-      ) : source === "trades" ? (
-        <TradesChart trades={trades} usdPerStock={usdPerStock} />
-      ) : (
-        <iframe
-          key={source + dark}
-          title={source === "gecko" ? "GeckoTerminal price chart" : "DexScreener price chart"}
-          src={source === "gecko" ? gecko : dexs}
-          style={{ width: "100%", height: 420, border: 0, borderRadius: 10, background: "var(--sunk)" }}
-          loading="lazy"
-          allow="clipboard-write"
-        />
-      )}
+      <div style={{ position: "relative" }}>
+        <div ref={box} style={{ width: "100%", height: 340 }} />
+        {!loading && data && data.candles.length === 0 && (
+          <div className="note small" style={{ position: "absolute", inset: "40% 10% auto", textAlign: "center" }}>{data.note ?? "No price data yet."}</div>
+        )}
+        {error && !data && <div className="note note-bad small" style={{ position: "absolute", inset: "40% 10% auto", textAlign: "center" }}>{error}</div>}
+      </div>
+      <div className="spread tiny muted">
+        <span>
+          {data?.source === "geckoterminal" ? "Candles: GeckoTerminal (USD)" : data ? "Candles: Stockcurve, from on-chain swaps" : ""}
+          {data?.note && data.candles.length > 0 ? ` · ${data.note}` : ""}
+        </span>
+        {data && (
+          <span className="hstack" style={{ gap: 10 }}>
+            <a href={`https://www.geckoterminal.com/solana/pools/${data.chartPool}`} target="_blank" rel="noreferrer">GeckoTerminal ↗</a>
+            <a href={`https://dexscreener.com/solana/${data.chartPool}`} target="_blank" rel="noreferrer">DexScreener ↗</a>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

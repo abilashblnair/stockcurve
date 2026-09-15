@@ -29,7 +29,8 @@ import { readDocument } from "./metadata.ts";
 const METAPLEX = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 
 export type TokenMeta = { name: string; symbol: string; uri: string; image: string | null; description: string | null; launchedWithStockcurve: boolean };
-export type Trade = { signature: string; time: number | null; side: "buy" | "sell"; stock: number; tokens: number; price: number; trader: string | null };
+/** price = stock paid or received per token, fees included; spot = pool price right after the trade (from the event's next sqrt price). */
+export type Trade = { signature: string; time: number | null; side: "buy" | "sell"; stock: number; tokens: number; price: number; spot: number | null; trader: string | null };
 
 /** Stock amounts in the snapshot are display amounts (raw x scaled-UI multiplier), priced with stock.usd. */
 export type PoolSnapshot = {
@@ -127,7 +128,7 @@ const pick = (o: any, ...keys: string[]) => {
 const num = (v: any) => (v === undefined || v === null ? 0 : Number(v.toString()));
 
 /** Swaps in one transaction, as raw amounts (no decimals applied). Null = no swap in it. */
-type RawTrade = { signature: string; time: number | null; buy: boolean; stockRaw: number; tokenRaw: number; trader: string | null };
+type RawTrade = { signature: string; time: number | null; buy: boolean; stockRaw: number; tokenRaw: number; sqrtAfter: string | null; trader: string | null };
 const parsedTx = new Map<string, RawTrade[]>();
 const fillJobs = new Map<string, Promise<void>>();
 
@@ -155,7 +156,8 @@ function parseSwaps(signature: string, tx: any, pool: string): RawTrade[] {
       const res = pick(d, "swap_result", "swapResult");
       const input = num(pick(res, "actual_input_amount", "actualInputAmount", "included_fee_input_amount", "includedFeeInputAmount"));
       const output = num(pick(res, "output_amount", "outputAmount"));
-      out.push({ signature, time: tx.blockTime ?? null, buy, stockRaw: buy ? input : output, tokenRaw: buy ? output : input, trader });
+      const sqrt = pick(res, "next_sqrt_price", "nextSqrtPrice");
+      out.push({ signature, time: tx.blockTime ?? null, buy, stockRaw: buy ? input : output, tokenRaw: buy ? output : input, sqrtAfter: sqrt ? sqrt.toString() : null, trader });
       break;
     }
   }
@@ -166,7 +168,7 @@ const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 
 export async function recentTrades(address: string, limit = 20): Promise<{ trades: Trade[]; pending: number }> {
-  return cached(`trades:${address}`, 5000, async () => {
+  return cached(`trades:${address}:${limit}`, 5000, async () => {
     const pool = new PublicKey(address);
     const ctx = await basics(address);
     if (!ctx) return { trades: [], pending: 0 };
@@ -199,7 +201,8 @@ export async function recentTrades(address: string, limit = 20): Promise<{ trade
       .map((t) => {
         const stock = t.stockRaw * scale;
         const tokens = t.tokenRaw / 10 ** ctx.baseDecimals;
-        return { signature: t.signature, time: t.time, side: t.buy ? ("buy" as const) : ("sell" as const), stock, tokens, price: tokens ? stock / tokens : 0, trader: t.trader };
+        const spot = t.sqrtAfter ? Number(getPriceFromSqrtPrice(new BN(t.sqrtAfter), ctx.baseDecimals, ctx.stockDecimals).toString()) * ctx.multiplier : null;
+        return { signature: t.signature, time: t.time, side: t.buy ? ("buy" as const) : ("sell" as const), stock, tokens, price: tokens ? stock / tokens : 0, spot, trader: t.trader };
       });
     return { trades, pending };
   });
@@ -301,22 +304,4 @@ async function buildSnapshot(address: string): Promise<PoolSnapshot | null> {
     activationType: timestamp ? "timestamp" : "slot",
     fetchedAt: Date.now(),
   };
-}
-
-// ---- external market data (chart embeds) ----
-
-export type MarketLinks = { gecko: boolean; dexscreener: boolean };
-
-export async function marketLinks(address: string): Promise<MarketLinks> {
-  return cached(`market:${address}`, 5 * 60_000, async () => {
-    const [gecko, dexscreener] = await Promise.all([
-      fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${address}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5000), cache: "no-store" })
-        .then((r) => r.ok)
-        .catch(() => false),
-      fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${address}`, { signal: AbortSignal.timeout(5000), cache: "no-store" })
-        .then(async (r) => (r.ok ? !!((await r.json()) as any)?.pairs?.length : false))
-        .catch(() => false),
-    ]);
-    return { gecko, dexscreener };
-  });
 }

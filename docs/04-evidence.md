@@ -66,6 +66,13 @@ Root causes found and fixed:
 3. Pool metadata hosted by Stockcurve was fetched over HTTPS through Caddy from inside the same server. It is now read from disk.
 4. Nothing was cached per pool. Snapshot (4 s), pool state (4 s), config (1 h, immutable), supply (1 h) are now cached, so many viewers cost one RPC read.
 
+## Charts
+
+- DexScreener indexed both launches within the hour but returns no USD price for pairs quoted in NVDAx (`priceUsd` empty), which is why its embed never rendered. Replaced with a native chart.
+- GeckoTerminal prices xStock pairs (BAG/MCDx DAMM v2: $67K liquidity, $455K 24 h volume) and allows browser requests (`access-control-allow-origin: *`), but answered 429 to the server's IP on the first calls. Candles are fetched from the browser.
+- Graduated pools: the chart follows the token to its DAMM v2 pool (BAG → `F9h1hHpUy1S3vKiC3AAveC4rVbzj8ikkd1VzzigsxSsu`).
+- On-chain candles use the post-trade pool price from each swap event. For GPU POOR the fee-inclusive sell price was 10% below the pool price (opening fee); using the event's price keeps the chart range at a realistic 0.5%.
+
 ## Verified behaviours
 
 - Settings below $750, under 10% locked LP, or LP not summing to 100% are refused with plain messages.

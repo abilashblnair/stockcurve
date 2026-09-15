@@ -9,7 +9,7 @@ Wallet needs: **0.05 SOL** (launch 0.0266 + trades + fees). NVDAx is optional no
 1. Open https://stockcurve.pewcake.fun/pools → filter **Launched here**. Expect GPUPOOR and PRINT with a green "Stockcurve" chip.
 2. Open PRINT. Check:
    - Loads in about a second, description shows, "Launched with Stockcurve" chip.
-   - **Price chart** tab shows DexScreener (GeckoTerminal button becomes active once it indexes).
+   - **Price chart** tab shows candles (label under the chart: "Stockcurve, from on-chain swaps" until GeckoTerminal indexes the pool). Switch 5m / 15m / 1h. Try a graduated pool too (e.g. BAG in /pools → Graduated): it shows GeckoTerminal candles from its DAMM v2 pool.
    - **Bonding curve** tab shows the curve with a marker near the start.
    - Recent trades lists your earlier buy.
    - Connect the wallet that launched it: "Your pool" chip and a **Claim** button in the Fees card (unclaimed partner + creator ≈ 0.00035 NVDAx).
