@@ -6,7 +6,7 @@ Ranked by value for the hackathon deadline first, then after.
 
 | # | Item | Why | Effort |
 |---|---|---|---|
-| 1 | **GitHub repo** with this README and docs | Required link for judges; shows open-source work | 30 min |
+| 1 | ~~GitHub repo~~ done: https://github.com/abilashblnair/stockcurve | Required link for judges | done |
 | 2 | **Demo video** following [07](07-demo-and-test-plan.md) | Judges watch this first | 1–2 h |
 | 3 | **Clarify Clawpump's requirement** with their team | Their docs do not show Meteora or stock pairing; the track requires it | message |
 | 4 | **Social share image per pool** (Open Graph) | Links shared on X show the token, stock, price and progress | 1–2 h |
@@ -40,4 +40,4 @@ Ranked by value for the hackathon deadline first, then after.
 - After graduation the pool page shows the final bonding state and routes trades through Jupiter; DAMM v2 LP management is not built.
 - The index refreshes every 30 minutes; pools launched elsewhere appear after the next scan (pools launched here appear immediately).
 - Recent trades cover the last 20 pool transactions.
-- Code is not in git yet.
+- Code is on GitHub: https://github.com/abilashblnair/stockcurve

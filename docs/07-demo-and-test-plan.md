@@ -58,5 +58,5 @@ Wallet needs: **0.05 SOL** (launch 0.0266 + trades + fees). NVDAx is optional no
 - [ ] Meteora DBC track: mention the equity-tuned config and the monitor
 - [ ] Clawpump track: ask Clawpump how "launch with clawpump and Meteora" should work (their docs show pump.fun and Pons only); show the agent API
 - [ ] Confirm one project can be entered in all three
-- [ ] GitHub repo created (code is not yet in git)
+- [x] GitHub repo: https://github.com/abilashblnair/stockcurve
 - [ ] Submit before **Friday 18 Sept 2026, 4:00 pm ET**

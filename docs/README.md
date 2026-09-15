@@ -1,6 +1,6 @@
 # Stockcurve documentation
 
-**Live:** https://stockcurve.pewcake.fun · **Built for:** Stocklana (Solana Foundation), Meteora "Best Use of DBC", Clawpump "Stocknized Agent" · **Status (2026-09-15):** live on mainnet, two real launches.
+**Live:** https://stockcurve.pewcake.fun · **Code:** https://github.com/abilashblnair/stockcurve · **Built for:** Stocklana (Solana Foundation), Meteora "Best Use of DBC", Clawpump "Stocknized Agent" · **Status (2026-09-15):** live on mainnet, two real launches.
 
 ## The 30-second version
 
