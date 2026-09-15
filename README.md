@@ -71,3 +71,7 @@ Stage 3: not run yet (needs a funded test wallet, ~0.05 SOL + 0.005 NVDAx).
 - **Pausable + permanent delegate**: the issuer can pause transfers or move tokens, which would freeze a curve. Show this on the pool page.
 - **Eligibility**: xStocks are not offered to US persons.
 - **Prior art**: hundreds of stock-quoted DBC pools already exist, so the originality has to come from the config (opening-auction fee, USD graduation, locked LP), tooling and monitoring, not from "stock as quote" alone.
+
+## License
+
+[MIT](LICENSE). Uses the open-source Meteora Dynamic Bonding Curve SDK, Solana web3.js, SPL Token and Next.js, each under its own license.

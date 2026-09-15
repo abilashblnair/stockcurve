@@ -40,5 +40,6 @@
     "@types/react-dom": "19.0.3",
     "@solana/wallet-adapter-react": "0.15.39",
     "@solana/wallet-adapter-base": "0.9.27"
-  }
+  },
+  "license": "MIT"
 }
