@@ -105,7 +105,9 @@ export default function TradePanel({
       if (b.error) throw new Error(b.error);
       if (!b.simulation.ok) throw new Error(b.simulation.error ?? "Simulation failed.");
       setBusy("Confirm in your wallet…");
-      const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight);
+      const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight, [], (stage, sec) =>
+        setBusy(stage === "signing" ? "Confirm in your wallet…" : stage === "sending" ? "Sending…" : `Confirming on Solana… ${sec ?? 0}s`),
+      );
       setBusy(null);
       setDone(sig);
       loadBalances();

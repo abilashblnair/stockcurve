@@ -1,9 +1,9 @@
 import "server-only";
 import BN from "bn.js";
 import { ComputeBudgetProgram, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { deriveDbcPoolAddress, deriveTokenBadgeAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { DYNAMIC_BONDING_CURVE_PROGRAM_ID, deriveDbcPoolAddress, deriveTokenBadgeAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { checkSettings, toConfigParameters, type LaunchSettings } from "../preset.ts";
-import { connection, dbc } from "./solana.ts";
+import { connection, dbc, priorityMicroLamports } from "./solana.ts";
 import { curveModel, feeModel, sdkValidation, type CurveModel, type FeeModel } from "./curve.ts";
 import { stockInfo, type StockInfo } from "./stockInfo.ts";
 
@@ -89,7 +89,7 @@ export async function buildLaunch(req: BuildRequest): Promise<BuildResult> {
 
   const cp = toConfigParameters(req.settings, { decimals: stock.decimals, usd: stock.usd!, multiplier: stock.multiplier });
   // The three RPC round trips are independent; run them together.
-  const [tx, fees, { blockhash, lastValidBlockHeight }] = await Promise.all([
+  const [tx, microLamports, { blockhash, lastValidBlockHeight }] = await Promise.all([
     dbc.partner.createConfigAndPool({
       ...cp,
       config,
@@ -100,12 +100,9 @@ export async function buildLaunch(req: BuildRequest): Promise<BuildResult> {
       tokenBadge: deriveTokenBadgeAddress(quoteMint),
       preCreatePoolParam: { name, symbol, uri: req.uri, poolCreator: wallet, baseMint },
     }),
-    connection.getRecentPrioritizationFees().catch(() => []),
+    priorityMicroLamports([DYNAMIC_BONDING_CURVE_PROGRAM_ID.toBase58(), quoteMint.toBase58()]),
     connection.getLatestBlockhash("confirmed"),
   ]);
-  const sorted = fees.map((f) => f.prioritizationFee).sort((a, b) => a - b);
-  const p75 = sorted.length ? sorted[Math.floor(sorted.length * 0.75)] : 50_000;
-  const microLamports = Math.min(Math.max(p75, 10_000), 500_000);
 
   const message = new TransactionMessage({
     payerKey: wallet,

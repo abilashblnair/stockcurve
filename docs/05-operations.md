@@ -73,6 +73,7 @@ ssh -i ../sounding/ssh/ssh-key-2026-09-05.key ubuntu@68.233.111.231 'cd ~/stockc
 
 1. **Caddy config not updating.** Pewcake's compose bind-mounts `deploy/Caddyfile` as a single file. Pewcake's `push.sh` replaced it with `mv`, so the running Caddy kept reading the old, deleted file; `caddy reload` changed nothing. The running config was also missing Pewcake's `flush_interval -1`. Fixed by recreating the Caddy container once (about 2 s of downtime) and changing Pewcake's `push.sh` to write the file in place and reload Caddy. **That `push.sh` change is on the PC; it reaches the server with Pewcake's next deploy.**
 2. **Slow pool pages and trades.** See [04-evidence.md](04-evidence.md#performance-live-server).
+3. **A buy expired before landing** ("The network did not include the transaction before it expired"). Causes: Stockcurve-built transactions used a 10,000 micro-lamport floor because `getRecentPrioritizationFees` returns zeros on Helius; Jupiter swaps asked for `high`, which was only ~1,500 micro-lamports; the blockhash was fetched at build time so wallet-approval time counted against it; and signed bytes went to a single RPC. Fixed: Helius priority estimates, Jupiter `veryHigh` capped at 100,000 lamports, fresh blockhash right before signing, `/api/send` fan-out to two RPCs with re-sends every 2 s. `SEND_RPCS` (comma-separated) adds more broadcast endpoints.
 
 ## Costs
 

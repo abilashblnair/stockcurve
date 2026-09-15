@@ -83,9 +83,9 @@ sequenceDiagram
   S->>R: build createConfig+createPool, priority fee, blockhash (parallel)
   S->>R: simulateTransaction
   S-->>B: unsigned v0 tx + simulation
-  B->>B: partial-sign with config + mint keys
   B->>Wa: signTransaction
-  B->>S: /api/rpc sendTransaction, poll status (re-broadcast every 2 s)
+  B->>S: POST /api/send (Helius + public RPC), poll status, re-send every 2 s
+  B->>B: swap in a fresh blockhash, partial-sign
   B->>S: POST /api/pools/track (pool)
   B->>B: go to /pool/<address>
 ```
@@ -94,7 +94,9 @@ sequenceDiagram
 
 1. Debounced `POST /api/trade/quote` while typing.
 2. On click, `POST /api/trade/build`: fresh quote; Jupiter `/swap/v1/quote` + `/swap/v1/swap` when Jupiter has a route, otherwise (stock only, pre-graduation) the SDK's `pool.swap`; mainnet simulation.
-3. Wallet signs, browser sends through `/api/rpc` and confirms.
+3. The browser swaps in a fresh blockhash (so time spent in the wallet popup does not eat the validity window), the wallet signs, and `/api/send` broadcasts the bytes to Helius and the public mainnet RPC. The browser polls status and re-sends every 2 s until confirmed or expired.
+
+Priority fees: transactions Stockcurve builds use Helius's `getPriorityFeeEstimate` "high" level for the programs involved (×1.2, 50k–2M micro-lamports). Jupiter swaps request `veryHigh` with a 100,000-lamport cap. (Jupiter's `high` measured ~1,500 micro-lamports on 2026-09-15 and a buy expired without landing.)
 
 ### Monitor
 
@@ -129,6 +131,7 @@ All responses are JSON. Errors: `{ "error": "message" }` with a 4xx/5xx status. 
 | POST | `/api/claim` | `{ pool, wallet }` | `{ tx, claims[], lastValidBlockHeight, simulation }` |
 | GET | `/api/pools` | | `{ pools[], updatedAt, scanning, progress }` |
 | POST | `/api/pools/track` | `{ pool }` | the indexed pool |
+| POST | `/api/send` | `{ tx }` (signed, base64) | `{ signature, accepted }`: broadcast to Helius + public RPC |
 | POST | `/api/rpc` | JSON-RPC | proxied to Helius (allow-listed methods only) |
 
 ## Security model

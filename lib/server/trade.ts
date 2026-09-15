@@ -8,8 +8,8 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { U64_MAX, swapQuote } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { cached, connection, dbc } from "./solana.ts";
+import { DYNAMIC_BONDING_CURVE_PROGRAM_ID, U64_MAX, swapQuote } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { cached, connection, dbc, priorityMicroLamports } from "./solana.ts";
 import { stockInfo } from "./stockInfo.ts";
 
 // Buy and sell a DBC token. Jupiter first: it routes from SOL or USDC through
@@ -182,15 +182,11 @@ async function simulate(vtx: VersionedTransaction) {
   };
 }
 
-async function priorityFee(): Promise<number> {
-  const fees = await connection.getRecentPrioritizationFees().catch(() => []);
-  const sorted = fees.map((f) => f.prioritizationFee).sort((a, b) => a - b);
-  const p75 = sorted.length ? sorted[Math.floor(sorted.length * 0.75)] : 50_000;
-  return Math.min(Math.max(p75, 10_000), 500_000);
-}
-
-async function compile(wallet: PublicKey, tx: Transaction, units: number) {
-  const [microLamports, { blockhash, lastValidBlockHeight }] = await Promise.all([priorityFee(), connection.getLatestBlockhash("confirmed")]);
+async function compile(wallet: PublicKey, tx: Transaction, units: number, pool: PublicKey) {
+  const [microLamports, { blockhash, lastValidBlockHeight }] = await Promise.all([
+    priorityMicroLamports([DYNAMIC_BONDING_CURVE_PROGRAM_ID.toBase58(), pool.toBase58()]),
+    connection.getLatestBlockhash("confirmed"),
+  ]);
   const message = new TransactionMessage({
     payerKey: wallet,
     recentBlockhash: blockhash,
@@ -213,7 +209,9 @@ export async function buildTrade(req: TradeRequest): Promise<TradeBuild> {
         userPublicKey: wallet.toBase58(),
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" } },
+        // Jupiter's "high" level measured ~1,500 micro-lamports (274 lamports total) and a buy expired unlanded.
+        // "veryHigh" measured ~88,000 (about 0.000015 SOL); the cap keeps any swap under 0.0001 SOL of priority fee.
+        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 100_000, priorityLevel: "veryHigh" } },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
@@ -233,7 +231,7 @@ export async function buildTrade(req: TradeRequest): Promise<TradeBuild> {
     referralTokenAccount: null,
     payer: wallet,
   });
-  const { vtx, lastValidBlockHeight } = await compile(wallet, tx, 200_000);
+  const { vtx, lastValidBlockHeight } = await compile(wallet, tx, 200_000, q.ctx.pool);
   return { ...q.quote, tx: Buffer.from(vtx.serialize()).toString("base64"), lastValidBlockHeight, simulation: await simulate(vtx) };
 }
 
@@ -280,6 +278,6 @@ export async function buildClaim(poolAddress: string, walletAddress: string): Pr
     claims.push(`creator: ${toUi(ctx.state.creatorQuoteFee, ctx.stockDecimals, ctx.multiplier)} ${ctx.stockSymbol}`);
   }
   if (!claims.length) throw new Error("Nothing to claim yet.");
-  const { vtx, lastValidBlockHeight } = await compile(wallet, tx, 250_000);
+  const { vtx, lastValidBlockHeight } = await compile(wallet, tx, 250_000, ctx.pool);
   return { tx: Buffer.from(vtx.serialize()).toString("base64"), lastValidBlockHeight, claims, simulation: await simulate(vtx) };
 }

@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import { Keypair } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { DEFAULT_SETTINGS, MIGRATED_FEE_OPTIONS, PRESETS, type FeeCurve, type LaunchSettings, type MigratedFeeBps } from "@/lib/settings";
 import { STOCKS } from "@/lib/stocks";
 import type { LaunchPreview } from "@/lib/server/launch";
 import type { StockInfo } from "@/lib/server/stockInfo";
 import { amount, bps, duration, pct, short, tiny, usd } from "@/lib/format";
-import { waitForConfirmation } from "@/lib/client/confirm";
+import { signSendConfirm } from "@/lib/client/send";
 import { CurveChart, FeeChart } from "./Charts";
 import WalletButton from "./WalletButton";
 
@@ -41,6 +41,7 @@ export default function Builder() {
   const [error, setError] = useState<string | null>(null);
   const [errorLogs, setErrorLogs] = useState<string[]>([]);
   const [ack, setAck] = useState(false);
+  const [waited, setWaited] = useState(0);
   const seq = useRef(0);
 
   const set = <K extends keyof LaunchSettings>(k: K, v: LaunchSettings[K]) => {
@@ -89,6 +90,7 @@ export default function Builder() {
     if (!publicKey || !signTransaction || !preview?.ok) return;
     setError(null);
     setErrorLogs([]);
+    setWaited(0);
     try {
       let uri = token.customUri.trim();
       if (!uri) {
@@ -117,14 +119,10 @@ export default function Builder() {
       }
 
       setStep("sign");
-      const vtx = VersionedTransaction.deserialize(Uint8Array.from(atob(b.tx), (ch) => ch.charCodeAt(0)));
-      vtx.sign([config, baseMint]);
-      const signed = await signTransaction(vtx);
-      const raw = signed.serialize();
-
-      setStep("confirm");
-      const sig = await connection.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 0 });
-      await waitForConfirmation(connection, sig, b.lastValidBlockHeight, raw);
+      const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight, [config, baseMint], (stage, sec) => {
+        if (stage !== "signing") setStep("confirm");
+        if (stage === "confirming") setWaited(sec ?? 0);
+      });
 
       setStep("done");
       // Put the pool in the index now (it would otherwise wait for the next scan). Do not block on it.
@@ -382,7 +380,7 @@ export default function Builder() {
             <WalletButton block />
           ) : (
             <button type="button" className="btn btn-accent btn-lg btn-block" disabled={!canLaunch} onClick={launch}>
-              {busy ? STEP_LABEL[step as Exclude<Step, "idle">] + "…" : `Create pool quoted in ${meta.symbol}`}
+              {busy ? STEP_LABEL[step as Exclude<Step, "idle">] + (step === "confirm" && waited > 3 ? ` (${waited}s)` : "…") : `Create pool quoted in ${meta.symbol}`}
             </button>
           )}
           {busy && (

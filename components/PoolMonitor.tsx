@@ -45,7 +45,9 @@ function ClaimButton({ pool, amountLabel, onClaimed }: { pool: string; amountLab
       if (b.error) throw new Error(b.error);
       if (!b.simulation.ok) throw new Error(b.simulation.error ?? "Simulation failed.");
       setBusy("Confirm in your wallet…");
-      const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight);
+      const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight, [], (stage, sec) =>
+        setBusy(stage === "signing" ? "Confirm in your wallet…" : `Confirming… ${sec ?? 0}s`),
+      );
       setMsg({ ok: true, text: "Fees claimed to your wallet.", sig });
       onClaimed();
     } catch (e) {
