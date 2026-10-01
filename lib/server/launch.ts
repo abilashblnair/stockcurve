@@ -133,7 +133,7 @@ export async function buildLaunch(req: BuildRequest): Promise<BuildResult> {
     simulation: {
       ok: !sim.value.err,
       units: sim.value.unitsConsumed ?? null,
-      error: sim.value.err ? (insufficient || sim.value.err === "AccountNotFound" ? "Not enough SOL for rent and fees (about 0.04 SOL needed)." : anchorErr ?? JSON.stringify(sim.value.err)) : null,
+      error: sim.value.err ? (insufficient || sim.value.err === "AccountNotFound" ? "Not enough SOL for rent and fees (about 0.03 SOL needed)." : anchorErr ?? JSON.stringify(sim.value.err)) : null,
       logs: sim.value.err ? logs.slice(-12) : [],
     },
   };

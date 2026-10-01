@@ -2,7 +2,7 @@
 
 Configure, launch, trade and monitor Meteora Dynamic Bonding Curve pools whose quote token is a tokenized stock (xStocks: NVDAx, SPYx, AAPLx...).
 
-**Live:** https://stockcurve.pewcake.fun · **Docs:** [docs/README.md](docs/README.md) (product, config maths, architecture, evidence, operations, FAQ, demo script, roadmap, agent API)
+**Live:** https://stockcurve.pewcake.fun · **Docs:** [docs/README.md](docs/README.md) (product, config maths, architecture, evidence, operations, FAQ, demo script, [hackathon demo](docs/10-hackathon-demo.md), roadmap, agent API)
 
 ## App
 

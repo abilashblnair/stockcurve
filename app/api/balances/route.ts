@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     new PublicKey(wallet);
     new PublicKey(pool);
-    return NextResponse.json(await balances(wallet, pool));
+    return NextResponse.json(await balances(wallet, pool, req.nextUrl.searchParams.get("fresh") === "1"));
   } catch (e) {
     return fail(e);
   }

@@ -3,15 +3,16 @@ import BN from "bn.js";
 import type { PublicKey } from "@solana/web3.js";
 import {
   DYNAMIC_BONDING_CURVE_PROGRAM_ID,
-  FEE_DENOMINATOR,
   PROTOCOL_FEE_PERCENT,
   Rounding,
+  feeNumeratorToBps,
   getBaseFeeNumeratorByPeriod,
   getDeltaAmountBaseUnsigned,
   getDeltaAmountQuoteUnsigned,
   getMigrationThresholdPrice,
   getPriceFromSqrtPrice,
   validateConfigParameters,
+  type BaseFeeMode,
   type ConfigParameters,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
 
@@ -91,23 +92,32 @@ export type FeeModel = {
   creatorPct: number;
   partnerPct: number;
   dynamic: boolean;
+  /** decay = opening window, flat = one fee, rate-limit = size-based (not a countdown). */
+  schedule: "decay" | "flat" | "rate-limit";
 };
 
 type BaseFeeLike = { cliffFeeNumerator: BN; firstFactor: number; secondFactor: BN; thirdFactor: BN; baseFeeMode: number };
 
+/** Integer bps, same rounding as the program (float division showed a 1% fee as 1.01%). */
+function toBps(numerator: BN): number {
+  return feeNumeratorToBps(numerator);
+}
+
 export function feeBpsAt(baseFee: BaseFeeLike, elapsedSec: number): number {
   const periods = baseFee.firstFactor;
   const freq = Number(baseFee.secondFactor.toString());
-  if (!periods || !freq || baseFee.baseFeeMode > 1) return Number(baseFee.cliffFeeNumerator.toString()) / (FEE_DENOMINATOR / 10_000);
+  // Mode 2 is the deprecated rate limiter: firstFactor/secondFactor are not a time schedule.
+  if (!periods || !freq || baseFee.baseFeeMode > 1) return toBps(baseFee.cliffFeeNumerator);
   const period = new BN(Math.max(0, Math.floor(elapsedSec / freq)));
-  const num = getBaseFeeNumeratorByPeriod(baseFee.cliffFeeNumerator, periods, period, baseFee.thirdFactor, baseFee.baseFeeMode);
-  return Number(num.toString()) / (FEE_DENOMINATOR / 10_000);
+  const num = getBaseFeeNumeratorByPeriod(baseFee.cliffFeeNumerator, periods, period, baseFee.thirdFactor, baseFee.baseFeeMode as BaseFeeMode);
+  return toBps(num);
 }
 
 export function feeModel(baseFee: BaseFeeLike, creatorTradingFeePercentage: number, dynamic: boolean): FeeModel {
   const periods = baseFee.firstFactor;
   const freq = Number(baseFee.secondFactor.toString());
-  const durationSec = periods && freq ? periods * freq : 0;
+  const scheduler = baseFee.baseFeeMode <= 1 && periods > 0 && freq > 0;
+  const durationSec = scheduler ? periods * freq : 0;
   const points: FeePoint[] = [];
   const steps = 60;
   const shown = durationSec || 3600;
@@ -118,13 +128,14 @@ export function feeModel(baseFee: BaseFeeLike, creatorTradingFeePercentage: numb
   const rest = 100 - PROTOCOL_FEE_PERCENT;
   return {
     startBps: feeBpsAt(baseFee, 0),
-    endBps: feeBpsAt(baseFee, durationSec + 1),
+    endBps: feeBpsAt(baseFee, durationSec > 0 ? durationSec : 0),
     durationSec,
     points,
     protocolPct: PROTOCOL_FEE_PERCENT,
     creatorPct: (rest * creatorTradingFeePercentage) / 100,
     partnerPct: (rest * (100 - creatorTradingFeePercentage)) / 100,
     dynamic,
+    schedule: baseFee.baseFeeMode > 1 ? "rate-limit" : durationSec > 0 ? "decay" : "flat",
   };
 }
 

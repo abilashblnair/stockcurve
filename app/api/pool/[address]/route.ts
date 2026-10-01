@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ addr
     return NextResponse.json({ error: "Not a Solana address." }, { status: 400 });
   }
   try {
-    const snap = await poolSnapshot(address);
+    const snap = await poolSnapshot(address, req.nextUrl.searchParams.get("fresh") === "1");
     if (!snap) return NextResponse.json({ error: "No DBC pool at this address." }, { status: 404 });
     return NextResponse.json(snap);
   } catch (e) {

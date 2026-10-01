@@ -110,7 +110,13 @@ export default function PoolTable({ limit, compact = false }: { limit?: number; 
             ))}
             {!shown.length && (
               <tr><td colSpan={5} className="muted small" style={{ padding: 20 }}>
-                {!index || (!index.updatedAt && index.scanning) ? `Indexing stock-quoted pools on mainnet… ${index?.progress ?? ""}` : "No pools match."}
+                {!index || (!index.updatedAt && index.scanning)
+                  ? `Indexing stock-quoted pools on mainnet… ${index?.progress ?? ""}`
+                  : filter === "mine"
+                    ? "No pools from this wallet yet. A launch shows up here right away."
+                    : q.trim()
+                      ? "No pools match that filter."
+                      : "No pools match."}
               </td></tr>
             )}
           </tbody>

@@ -42,12 +42,16 @@ export function ago(unixSec: number | null): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+/** Human time left. Sub-minute windows used to render as "0m". */
 export function duration(sec: number): string {
-  if (sec <= 0) return "0m";
-  if (sec < 3600) return `${Math.round(sec / 60)}m`;
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
-  return m ? `${h}h ${m}m` : `${h}h`;
+  if (!Number.isFinite(sec) || sec <= 0) return "0s";
+  const s = Math.round(sec);
+  if (s < 60) return `${s}s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rem = s % 60;
+  if (h > 0) return m ? `${h}h ${m}m` : `${h}h`;
+  return rem ? `${m}m ${rem}s` : `${m}m`;
 }
 
 export const solscan = (kind: "account" | "tx" | "token", id: string) => `https://solscan.io/${kind}/${id}`;

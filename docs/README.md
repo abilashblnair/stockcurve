@@ -18,9 +18,10 @@ Then it monitors every stock-quoted DBC pool on Solana: price, progress, the fee
 | [04-evidence.md](04-evidence.md) | Feasibility proof, mainnet results, performance measurements |
 | [05-operations.md](05-operations.md) | Deploy, server layout, env, rollback, logs, known noise |
 | [06-faq.md](06-faq.md) | Questions judges and users will ask, with answers |
-| [07-demo-and-test-plan.md](07-demo-and-test-plan.md) | Today's test checklist and the demo video script |
+| [07-demo-and-test-plan.md](07-demo-and-test-plan.md) | September 2026 test checklist and the original video script |
 | [08-roadmap.md](08-roadmap.md) | What is not built yet, ranked |
 | [09-agent-api.md](09-agent-api.md) | Driving Stockcurve from an AI agent (Clawpump track) |
+| [10-hackathon-demo.md](10-hackathon-demo.md) | 4-minute judge script for the October 2026 submission: screens, what to say, equity risks, originality |
 
 ## Key facts to remember
 

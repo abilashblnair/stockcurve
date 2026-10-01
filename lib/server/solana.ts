@@ -44,6 +44,11 @@ export async function priorityMicroLamports(accountKeys: string[]): Promise<numb
 
 /** Small in-memory TTL cache with in-flight de-duplication. */
 const store = new Map<string, { at: number; value?: unknown; pending?: Promise<unknown> }>();
+
+/** Drop cached reads so a just-confirmed trade or claim is not shown stale for the TTL. */
+export function dropCache(...keys: string[]) {
+  for (const key of keys) store.delete(key);
+}
 export async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
   const hit = store.get(key);
   if (hit?.value !== undefined && Date.now() - hit.at < ttlMs) return hit.value as T;

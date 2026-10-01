@@ -9,7 +9,7 @@ import {
 } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { DYNAMIC_BONDING_CURVE_PROGRAM_ID, U64_MAX, swapQuote } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { cached, connection, dbc, priorityMicroLamports } from "./solana.ts";
+import { cached, connection, dbc, dropCache, priorityMicroLamports } from "./solana.ts";
 import { stockInfo } from "./stockInfo.ts";
 
 // Buy and sell a DBC token. Jupiter first: it routes from SOL or USDC through
@@ -239,10 +239,12 @@ export async function buildTrade(req: TradeRequest): Promise<TradeBuild> {
 
 export type Balances = { sol: number; usdc: number; stock: number; token: number };
 
-export async function balances(wallet: string, pool: string): Promise<Balances> {
+export async function balances(wallet: string, pool: string, fresh = false): Promise<Balances> {
   const owner = new PublicKey(wallet);
   const ctx = await poolCtx(pool);
-  return cached(`bal:${wallet}:${pool}`, 4000, async () => {
+  const key = `bal:${wallet}:${pool}`;
+  if (fresh) dropCache(key);
+  return cached(key, 4000, async () => {
     const [lamports, classic, t22] = await Promise.all([
       connection.getBalance(owner),
       connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),

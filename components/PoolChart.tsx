@@ -140,7 +140,7 @@ export default function PoolChart({ address, refreshKey }: { address: string; re
       <div style={{ position: "relative" }}>
         <div ref={box} style={{ width: "100%", height: 340 }} />
         {!loading && data && data.candles.length === 0 && (
-          <div className="note small" style={{ position: "absolute", inset: "40% 10% auto", textAlign: "center" }}>{data.note ?? "No price data yet."}</div>
+          <div className="note small" style={{ position: "absolute", inset: "40% 10% auto", textAlign: "center" }}>{data.note ?? "No candles yet. The first swaps draw the chart; until then this stays empty."}</div>
         )}
         {error && !data && <div className="note note-bad small" style={{ position: "absolute", inset: "40% 10% auto", textAlign: "center" }}>{error}</div>}
       </div>

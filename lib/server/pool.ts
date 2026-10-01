@@ -11,7 +11,7 @@ import {
   getDeltaAmountBaseUnsigned,
   getPriceFromSqrtPrice,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { cached, connection, dbc } from "./solana.ts";
+import { cached, connection, dbc, dropCache } from "./solana.ts";
 import { curveModel, feeBpsAt, feeModel, type CurveModel, type FeeModel } from "./curve.ts";
 import { stockInfo, type StockInfo } from "./stockInfo.ts";
 import { readDocument } from "./metadata.ts";
@@ -167,8 +167,10 @@ function parseSwaps(signature: string, tx: any, pool: string): RawTrade[] {
 const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 
-export async function recentTrades(address: string, limit = 20): Promise<{ trades: Trade[]; pending: number }> {
-  return cached(`trades:${address}:${limit}`, 5000, async () => {
+export async function recentTrades(address: string, limit = 20, fresh = false): Promise<{ trades: Trade[]; pending: number }> {
+  const key = `trades:${address}:${limit}`;
+  if (fresh) dropCache(key);
+  return cached(key, 5000, async () => {
     const pool = new PublicKey(address);
     const ctx = await basics(address);
     if (!ctx) return { trades: [], pending: 0 };
@@ -222,7 +224,8 @@ async function basics(address: string) {
   return { state, cfg, stock, multiplier: stock.multiplier, stockDecimals: stock.decimals, baseDecimals: cfg.tokenDecimal as number };
 }
 
-export async function poolSnapshot(address: string): Promise<PoolSnapshot | null> {
+export async function poolSnapshot(address: string, fresh = false): Promise<PoolSnapshot | null> {
+  if (fresh) dropCache(`snap:${address}`, `pool:${address}`);
   return cached(`snap:${address}`, 4000, () => buildSnapshot(address));
 }
 
@@ -242,6 +245,9 @@ async function buildSnapshot(address: string): Promise<PoolSnapshot | null> {
   const timestamp = cfg.activationType === 1;
   const nowPoint = timestamp ? Math.floor(Date.now() / 1000) : await connection.getSlot();
   const elapsedPoints = Math.max(0, nowPoint - num(state.activationPoint));
+  // Fee scheduler periods are seconds on timestamp pools and slots otherwise.
+  // ~400ms slots, so the countdown and chart stay in wall-clock time.
+  const toWallSec = (native: number) => (timestamp ? native : native * 0.4);
 
   const curvePoints = (cfg.curve as any[]).filter((c) => !c.liquidity.isZero());
   const curve = curveModel(
@@ -267,7 +273,10 @@ async function buildSnapshot(address: string): Promise<PoolSnapshot | null> {
   const quoteReserve = stockUi(state.quoteReserve);
   const graduationRaise = stockUi(cfg.migrationQuoteThreshold);
   const supply = Number(supplyRaw) / 10 ** baseDec;
-  const fees = feeModel(cfg.poolFees.baseFee, cfg.creatorTradingFeePercentage, !!cfg.poolFees.dynamicFee?.binStep);
+  const feesNative = feeModel(cfg.poolFees.baseFee, cfg.creatorTradingFeePercentage, !!cfg.poolFees.dynamicFee?.binStep);
+  const fees = timestamp
+    ? feesNative
+    : { ...feesNative, durationSec: toWallSec(feesNative.durationSec), points: feesNative.points.map((p) => ({ t: toWallSec(p.t), bps: p.bps })) };
 
   return {
     address,
@@ -289,7 +298,7 @@ async function buildSnapshot(address: string): Promise<PoolSnapshot | null> {
     isMigrated: !!state.isMigrated,
     curveComplete: num(state.quoteReserve) >= num(cfg.migrationQuoteThreshold),
     feeNowBps: feeBpsAt(cfg.poolFees.baseFee, elapsedPoints),
-    feeElapsedSec: timestamp ? elapsedPoints : Math.round(elapsedPoints * 0.4),
+    feeElapsedSec: toWallSec(elapsedPoints),
     fees,
     unclaimed: { partner: stockUi(state.partnerQuoteFee), creator: stockUi(state.creatorQuoteFee), protocol: stockUi(state.protocolQuoteFee) },
     lifetime: { trading: stockUi(state.metrics?.totalTradingQuoteFee), protocol: stockUi(state.metrics?.totalProtocolQuoteFee) },

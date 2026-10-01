@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import type { PoolSnapshot, Trade } from "@/lib/server/pool";
@@ -9,6 +9,7 @@ import { friendlyError, signSendConfirm } from "@/lib/client/send";
 import { CurveChart, FeeChart } from "./Charts";
 import PoolChart from "./PoolChart";
 import TradePanel from "./TradePanel";
+import WalletButton from "./WalletButton";
 
 const SNAPSHOT_MS = 10_000;
 const TRADES_MS = 15_000;
@@ -31,24 +32,56 @@ function Copy({ value }: { value: string }) {
   );
 }
 
-function ClaimButton({ pool, amountLabel, onClaimed }: { pool: string; amountLabel: string; onClaimed: () => void }) {
+function FeeClaim({
+  pool,
+  stockSymbol,
+  stockUsd,
+  claimable,
+  lifetime,
+  mine,
+  feeClaimer,
+  creator,
+  onClaimed,
+}: {
+  pool: string;
+  stockSymbol: string;
+  stockUsd: number | null;
+  claimable: number;
+  lifetime: number;
+  mine: boolean;
+  feeClaimer: string;
+  creator: string;
+  onClaimed: () => void;
+}) {
   const { connection } = useConnection();
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey, signTransaction, connected } = useWallet();
   const [busy, setBusy] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string; sig?: string } | null>(null);
+  const label = `${amount(claimable, 6)} ${stockSymbol}${stockUsd !== null ? ` (${usd(claimable * stockUsd)})` : ""}`;
+  const same = feeClaimer === creator;
+
   async function claim() {
-    if (!publicKey || !signTransaction) return;
+    if (!publicKey || !signTransaction) {
+      setMsg({ ok: false, text: "This wallet cannot sign. Unlock it and try again." });
+      return;
+    }
     setMsg(null);
+    setLogs([]);
     try {
       setBusy("Simulating…");
       const b = await fetch("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pool, wallet: publicKey.toBase58() }) }).then((r) => r.json());
       if (b.error) throw new Error(b.error);
-      if (!b.simulation.ok) throw new Error(b.simulation.error ?? "Simulation failed.");
-      setBusy("Confirm in your wallet…");
+      if (!b.simulation?.ok) {
+        setLogs((b.simulation?.logs ?? []).slice(-6));
+        throw new Error(b.simulation?.error ?? "Simulation failed.");
+      }
+      const what = Array.isArray(b.claims) && b.claims.length ? b.claims.join(", ") : label;
+      setBusy("Simulation passed. Confirm in your wallet…");
       const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight, [], (stage, sec) =>
-        setBusy(stage === "signing" ? "Confirm in your wallet…" : `Confirming… ${sec ?? 0}s`),
+        setBusy(stage === "signing" ? "Confirm in your wallet…" : stage === "sending" ? "Sending…" : `Confirming… ${sec ?? 0}s`),
       );
-      setMsg({ ok: true, text: "Fees claimed to your wallet.", sig });
+      setMsg({ ok: true, text: `Fees claimed (${what}).`, sig });
       onClaimed();
     } catch (e) {
       setMsg({ ok: false, text: friendlyError(e) });
@@ -56,12 +89,38 @@ function ClaimButton({ pool, amountLabel, onClaimed }: { pool: string; amountLab
       setBusy(null);
     }
   }
+
   return (
     <div className="stack-sm">
-      <button type="button" className="btn btn-accent btn-block" onClick={claim} disabled={!!busy}>{busy ?? `Claim ${amountLabel}`}</button>
+      {!connected && (
+        <>
+          <p className="tiny muted" style={{ margin: 0 }}>
+            Connect the fee claimer or creator wallet to claim. Launching here makes your wallet both, so you receive 80% of trading fees in {stockSymbol}. Meteora keeps 20%.
+          </p>
+          <WalletButton block />
+        </>
+      )}
+      {connected && !mine && (
+        <p className="tiny muted" style={{ margin: 0 }}>
+          This wallet cannot claim. Fees go to {same ? <>the launching wallet <span className="mono">{short(feeClaimer)}</span></> : <>fee claimer <span className="mono">{short(feeClaimer)}</span> and creator <span className="mono">{short(creator)}</span></>}.
+        </p>
+      )}
+      {connected && mine && claimable <= 0 && (
+        <p className="tiny muted" style={{ margin: 0 }}>
+          {lifetime > 0
+            ? <>Nothing unclaimed right now. Lifetime trading fees are <span className="mono">{amount(lifetime, 6)} {stockSymbol}</span>. A new trade adds more.</>
+            : <>Nothing to claim yet. A buy or sell deposits fees here in {stockSymbol}. You claim the partner and creator shares.</>}
+        </p>
+      )}
+      {connected && mine && (
+        <button type="button" className="btn btn-accent btn-block" onClick={claim} disabled={!!busy || claimable <= 0}>
+          {busy ?? (claimable > 0 ? `Claim ${label}` : "Claim")}
+        </button>
+      )}
       {msg && (
         <div className={`note small ${msg.ok ? "note-ok" : "note-bad"}`}>
           {msg.text} {msg.sig && <a href={solscan("tx", msg.sig)} target="_blank" rel="noreferrer">View transaction</a>}
+          {logs.length > 0 && <pre className="mono tiny" style={{ whiteSpace: "pre-wrap", margin: "8px 0 0" }}>{logs.join("\n")}</pre>}
         </div>
       )}
     </div>
@@ -77,15 +136,25 @@ export default function PoolMonitor({ address, launched }: { address: string; la
   const [pendingTx, setPendingTx] = useState(0);
   const [chartTab, setChartTab] = useState<"price" | "curve">("price");
   const [chartKey, setChartKey] = useState(0);
+  // After a claim, ignore stale cached unclaimed amounts for a few seconds.
+  const pinFees = useRef<{ until: number; partner: boolean; creator: boolean } | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (fresh = false) => {
     try {
-      const r = await fetch(`/api/pool/${address}`, { cache: "no-store" });
+      const r = await fetch(`/api/pool/${address}${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
       const j = await r.json();
       if (!r.ok) {
         // A pool created seconds ago may not be readable yet; keep trying quietly.
         if (!(launched && r.status === 404)) setError(j.error ?? "Could not load this pool.");
         return;
+      }
+      const pin = pinFees.current;
+      if (pin && Date.now() < pin.until) {
+        j.unclaimed = {
+          ...j.unclaimed,
+          partner: pin.partner ? 0 : j.unclaimed.partner,
+          creator: pin.creator ? 0 : j.unclaimed.creator,
+        };
       }
       setSnap(j);
       setError(null);
@@ -95,9 +164,9 @@ export default function PoolMonitor({ address, launched }: { address: string; la
     }
   }, [address, launched]);
 
-  const loadTrades = useCallback(async () => {
+  const loadTrades = useCallback(async (fresh = false) => {
     try {
-      const j = await fetch(`/api/pool/${address}/trades`, { cache: "no-store" }).then((r) => r.json());
+      const j = await fetch(`/api/pool/${address}/trades${fresh ? "?fresh=1" : ""}`, { cache: "no-store" }).then((r) => r.json());
       if (j.trades) {
         setTrades(j.trades);
         setPendingTx(j.pending ?? 0);
@@ -110,8 +179,9 @@ export default function PoolMonitor({ address, launched }: { address: string; la
   }, [address]);
 
   const refreshAll = useCallback(() => {
-    void load();
-    setTimeout(() => void loadTrades(), 1500);
+    void load(true);
+    setTimeout(() => void load(true), 3000);
+    setTimeout(() => void loadTrades(true), 1500);
     // Let the new swap be indexed, then redraw the candles.
     setTimeout(() => setChartKey((k) => k + 1), 6000);
   }, [load, loadTrades]);
@@ -136,7 +206,12 @@ export default function PoolMonitor({ address, launched }: { address: string; la
       <div className="stack">
         {launched && !error && <div className="note note-ok">Pool created. Waiting for the network to show it… this usually takes a few seconds.</div>}
         {error ? <div className="note note-bad">{error}</div> : <div className="skeleton" style={{ height: 76 }} />}
-        {!error && <div className="skeleton" style={{ height: 360 }} />}
+        {!error && (
+          <div className="stack-sm">
+            <div className="skeleton" style={{ height: 360 }} />
+            <span className="tiny muted">Loading this pool from mainnet…</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -145,6 +220,7 @@ export default function PoolMonitor({ address, launched }: { address: string; la
   const u = s.stock.usd; // stock amounts in the snapshot are display amounts
   const curveUsd = u !== null ? u * s.stock.multiplier : null; // curve points are raw stock units
   const inWindow = s.fees.durationSec > 0 && s.feeElapsedSec < s.fees.durationSec;
+  const feeSchedule = s.fees.schedule ?? (s.fees.durationSec > 0 ? "decay" : "flat");
   const status = s.isMigrated ? { label: "Graduated to DAMM v2", cls: "chip-ok" } : s.curveComplete ? { label: "Curve complete, migrating", cls: "chip-warn" } : { label: "Bonding", cls: "" };
   const me = publicKey?.toBase58();
   const isPartner = me === s.feeClaimer;
@@ -244,7 +320,7 @@ export default function PoolMonitor({ address, launched }: { address: string; la
                 </table>
               </div>
             ) : (
-              <p className="panel-pad small muted" style={{ margin: 0, paddingTop: 0 }}>{pendingTx > 0 ? "Loading trades from the network…" : "No swaps yet."}</p>
+              <p className="panel-pad small muted" style={{ margin: 0, paddingTop: 0 }}>{pendingTx > 0 ? "Loading trades from the network…" : "No swaps yet. A buy or sell shows up here within a few seconds."}</p>
             )}
           </div>
         </div>
@@ -257,14 +333,18 @@ export default function PoolMonitor({ address, launched }: { address: string; la
               <span style={{ fontWeight: 600 }}>Base fee now</span>
               <span className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{bps(s.feeNowBps)}</span>
             </div>
-            {s.fees.durationSec > 0 ? (
+            {feeSchedule === "decay" ? (
               <>
                 <FeeChart points={s.fees.points} nowSec={Math.min(s.feeElapsedSec, s.fees.durationSec)} />
-                <span className="tiny muted">
-                  {inWindow ? `Opening window: ${duration(s.fees.durationSec - s.feeElapsedSec)} left, falling to ${bps(s.fees.endBps)}.` : `Opening window finished. Steady fee ${bps(s.fees.endBps)}.`}
+                <div className={inWindow ? "note note-warn tiny" : "tiny muted"}>
+                  {inWindow
+                    ? `Opening window: ${duration(s.fees.durationSec - s.feeElapsedSec)} left. The base fee falls from ${bps(s.fees.startBps)} to ${bps(s.fees.endBps)}.`
+                    : `Opening window finished. Steady fee ${bps(s.fees.endBps)}.`}
                   {s.fees.dynamic ? " Volatility fee applies on top." : ""}
-                </span>
+                </div>
               </>
+            ) : feeSchedule === "rate-limit" ? (
+              <span className="tiny muted">Rate limiter: the base fee can rise with trade size, then relax. This is not an opening-auction countdown.</span>
             ) : (
               <span className="tiny muted">Flat schedule{s.fees.dynamic ? ", plus volatility fee" : ""}.</span>
             )}
@@ -279,8 +359,28 @@ export default function PoolMonitor({ address, launched }: { address: string; la
               <dt>Unclaimed, protocol</dt><dd>{amount(s.unclaimed.protocol, 6)}</dd>
               <dt>Split partner / creator / protocol</dt><dd>{pct(s.fees.partnerPct, 0)} / {pct(s.fees.creatorPct, 0)} / {pct(s.fees.protocolPct, 0)}</dd>
             </dl>
-            {mine && claimable > 0 && <ClaimButton pool={s.address} amountLabel={`${amount(claimable, 6)} ${s.stock.symbol}${u !== null ? ` (${usd(claimable * u)})` : ""}`} onClaimed={refreshAll} />}
-            {mine && claimable === 0 && <span className="tiny muted">Nothing to claim yet. Fees from each trade land here in {s.stock.symbol}.</span>}
+            <FeeClaim
+              pool={s.address}
+              stockSymbol={s.stock.symbol}
+              stockUsd={u}
+              claimable={claimable}
+              lifetime={s.lifetime.trading}
+              mine={mine}
+              feeClaimer={s.feeClaimer}
+              creator={s.creator}
+              onClaimed={() => {
+                pinFees.current = { until: Date.now() + 12_000, partner: isPartner, creator: isCreator };
+                setSnap((prev) => prev ? {
+                  ...prev,
+                  unclaimed: {
+                    partner: isPartner ? 0 : prev.unclaimed.partner,
+                    creator: isCreator ? 0 : prev.unclaimed.creator,
+                    protocol: prev.unclaimed.protocol,
+                  },
+                } : prev);
+                refreshAll();
+              }}
+            />
           </div>
 
           <div className="panel panel-pad stack-sm">
