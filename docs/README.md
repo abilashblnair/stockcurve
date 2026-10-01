@@ -22,6 +22,7 @@ Then it monitors every stock-quoted DBC pool on Solana: price, progress, the fee
 | [08-roadmap.md](08-roadmap.md) | What is not built yet, ranked |
 | [09-agent-api.md](09-agent-api.md) | Driving Stockcurve from an AI agent (Clawpump track) |
 | [10-hackathon-demo.md](10-hackathon-demo.md) | 4-minute judge script for the October 2026 submission: screens, what to say, equity risks, originality |
+| [11-agent-for-judges.md](11-agent-for-judges.md) | Same lifecycle over HTTP, dry-run by default: one command, curl, what each response means, fees paid in the stock |
 
 ## Key facts to remember
 

@@ -88,12 +88,13 @@ export default function Builder() {
     if (token.customUri && !/^https:\/\//.test(token.customUri)) out.push("Metadata link must be https.");
     return out;
   }, [token]);
-  const warnings = useMemo(() => {
+  const localWarnings = useMemo(() => {
     const w: string[] = [];
     if (stock?.permanentDelegate) w.push(`The ${stock.symbol} issuer holds a permanent delegate: it can move ${stock.symbol} out of any account, including this pool's reserve.`);
     if (stock?.nextMultiplierAt) w.push(`${stock.symbol} has a corporate action scheduled (multiplier ${stock.multiplier} → ${stock.nextMultiplier}). USD values shift when it applies.`);
     return w;
   }, [stock]);
+  const warnings = Array.isArray(preview?.warnings) ? preview.warnings : localWarnings;
   const canLaunch = !!preview?.ok && !previewError && tokenProblems.length === 0 && connected && !!signTransaction && !busy && (warnings.length === 0 || ack);
 
   async function launch() {

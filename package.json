@@ -10,7 +10,8 @@
     "probe": "tsx scripts/probe.ts",
     "simulate": "tsx scripts/simulate.ts",
     "live": "tsx scripts/live.ts",
-    "agent": "tsx scripts/agent.ts"
+    "agent": "tsx scripts/agent.ts",
+    "agent:demo": "tsx scripts/agent.ts demo"
   },
   "type": "module",
   "dependencies": {

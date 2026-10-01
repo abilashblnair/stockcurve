@@ -47,7 +47,7 @@ export type TradeQuote = {
 export type TradeBuild = TradeQuote & {
   tx: string;
   lastValidBlockHeight: number;
-  simulation: { ok: boolean; error: string | null; logs: string[] };
+  simulation: { ok: boolean; units: number | null; error: string | null; logs: string[] };
 };
 
 type PoolCtx = {
@@ -171,12 +171,14 @@ export async function quoteTrade(req: TradeRequest): Promise<TradeQuote> {
 async function simulate(vtx: VersionedTransaction) {
   const sim = await connection.simulateTransaction(vtx, { sigVerify: false, replaceRecentBlockhash: true });
   const logs = sim.value.logs ?? [];
-  if (!sim.value.err) return { ok: true, error: null, logs: [] };
+  const units = sim.value.unitsConsumed ?? null;
+  if (!sim.value.err) return { ok: true, units, error: null, logs: [] as string[] };
   const anchor = logs.find((l) => l.includes("Error Message:"))?.split("Error Message:")[1]?.trim();
   const slippage = logs.some((l) => /slippage|ExceededSlippage|0x1771|exceeds desired slippage/i.test(l));
   const funds = sim.value.err === "AccountNotFound" || logs.some((l) => /insufficient (funds|lamports)/i.test(l));
   return {
     ok: false,
+    units,
     error: funds ? "Not enough balance for this trade plus network fees." : slippage ? "Price moved past your slippage limit. Raise slippage or try a smaller amount." : anchor ?? JSON.stringify(sim.value.err),
     logs: logs.slice(-10),
   };
@@ -260,7 +262,7 @@ export async function balances(wallet: string, pool: string, fresh = false): Pro
 
 // ---- claim trading fees ----
 
-export type ClaimBuild = { tx: string; lastValidBlockHeight: number; claims: string[]; simulation: { ok: boolean; error: string | null; logs: string[] } };
+export type ClaimBuild = { tx: string; lastValidBlockHeight: number; claims: string[]; simulation: { ok: boolean; units: number | null; error: string | null; logs: string[] } };
 
 export async function buildClaim(poolAddress: string, walletAddress: string): Promise<ClaimBuild> {
   const wallet = new PublicKey(walletAddress);

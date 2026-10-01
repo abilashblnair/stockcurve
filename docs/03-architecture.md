@@ -118,17 +118,17 @@ All responses are JSON. Errors: `{ "error": "message" }` with a 4xx/5xx status. 
 |---|---|---|---|
 | GET | `/api/health` | | `{ ok, slot }` |
 | GET | `/api/stocks` | | stocks with price, multiplier, pause, delegate, badge |
-| POST | `/api/preview` | partial `LaunchSettings` | `{ ok, problems[], stock, curve, fees, startFdvUsd, graduationFdvUsd }` |
+| POST | `/api/preview` | partial `LaunchSettings` | `{ ok, problems[], warnings[], stock, curve, fees, startFdvUsd, graduationFdvUsd }` |
 | POST | `/api/metadata` | `{ name, symbol, description?, image?, website?, x?, stock? }` | `{ uri, document }` |
 | GET | `/meta/<id>` | | the metadata JSON (immutable cache) |
 | POST | `/api/build` | `{ settings, wallet, config, baseMint, name, symbol, uri }` | `{ tx, pool, lastValidBlockHeight, simulation }` |
-| GET | `/api/pool/<address>` | | `PoolSnapshot` |
+| GET | `/api/pool/<address>` | optional `?wallet=` | `PoolSnapshot`, plus `forWallet` (claimable stock fees for that address) when `wallet` is set |
 | GET | `/api/pool/<address>/trades` | | `{ trades[], pending }` |
 | GET | `/api/pool/<address>/chart` | `?tf=` 5m, 15m, 1h, 4h or 1d | `{ pool, baseMint, isMigrated, candles[], note }` (on-chain candles) |
 | POST | `/api/trade/quote` | `{ pool, side, asset: SOL/USDC/STOCK, amount, slippageBps, route?: auto/dbc }` | `{ route, routeLabel, outAmount, minOut, priceImpactPct }` |
-| POST | `/api/trade/build` | quote body + `wallet` | quote + `{ tx, lastValidBlockHeight, simulation }` |
+| POST | `/api/trade/build` | quote body + `wallet` | quote + `{ tx, lastValidBlockHeight, simulation: { ok, units, error, logs } }` |
 | GET | `/api/balances` | `?wallet=&pool=` | `{ sol, usdc, stock, token }` |
-| POST | `/api/claim` | `{ pool, wallet }` | `{ tx, claims[], lastValidBlockHeight, simulation }` |
+| POST | `/api/claim` | `{ pool, wallet }` | `{ tx, claims[], lastValidBlockHeight, simulation: { ok, units, error, logs } }` |
 | GET | `/api/pools` | | `{ pools[], updatedAt, scanning, progress }` |
 | POST | `/api/pools/track` | `{ pool }` | the indexed pool |
 | POST | `/api/send` | `{ tx }` (signed, base64) | `{ signature, accepted }`: broadcast to Helius + public RPC |

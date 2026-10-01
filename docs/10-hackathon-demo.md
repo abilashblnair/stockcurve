@@ -78,3 +78,13 @@ Then the line judges need: "Stock as the quote token is not new. Hundreds of the
 | Jupiter has no route | **Switch to NVDAx and swap on the curve.** |
 | Claim stays disabled | The connected wallet must be the fee claimer or creator, and a trade must have paid a fee. Protocol fees are not yours. |
 | Opening window already finished | Expected on PRINT and the other September launches. The fee note says "Opening window finished. Steady fee 1%." Launch a new pool to show the 25% window. |
+
+## Same story, no wallet UI
+
+If the room has no browser wallet, run the agent path instead. It is the same server: preview, unsigned launch, quote, claim, with fees paid in the quote stock. Dry run by default.
+
+```bash
+STOCKCURVE_URL=http://127.0.0.1:3120 npm run agent:demo
+```
+
+Walkthrough, curl, and what each JSON field means: [11-agent-for-judges.md](11-agent-for-judges.md).
