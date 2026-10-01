@@ -9,7 +9,7 @@ import {
 } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { DYNAMIC_BONDING_CURVE_PROGRAM_ID, U64_MAX, swapQuote } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { cached, connection, dbc, priorityMicroLamports } from "./solana.ts";
+import { cached, connection, dbc, dropCache, priorityMicroLamports } from "./solana.ts";
 import { stockInfo } from "./stockInfo.ts";
 
 // Buy and sell a DBC token. Jupiter first: it routes from SOL or USDC through
@@ -47,7 +47,7 @@ export type TradeQuote = {
 export type TradeBuild = TradeQuote & {
   tx: string;
   lastValidBlockHeight: number;
-  simulation: { ok: boolean; error: string | null; logs: string[] };
+  simulation: { ok: boolean; units: number | null; error: string | null; logs: string[] };
 };
 
 type PoolCtx = {
@@ -171,12 +171,14 @@ export async function quoteTrade(req: TradeRequest): Promise<TradeQuote> {
 async function simulate(vtx: VersionedTransaction) {
   const sim = await connection.simulateTransaction(vtx, { sigVerify: false, replaceRecentBlockhash: true });
   const logs = sim.value.logs ?? [];
-  if (!sim.value.err) return { ok: true, error: null, logs: [] };
+  const units = sim.value.unitsConsumed ?? null;
+  if (!sim.value.err) return { ok: true, units, error: null, logs: [] as string[] };
   const anchor = logs.find((l) => l.includes("Error Message:"))?.split("Error Message:")[1]?.trim();
   const slippage = logs.some((l) => /slippage|ExceededSlippage|0x1771|exceeds desired slippage/i.test(l));
   const funds = sim.value.err === "AccountNotFound" || logs.some((l) => /insufficient (funds|lamports)/i.test(l));
   return {
     ok: false,
+    units,
     error: funds ? "Not enough balance for this trade plus network fees." : slippage ? "Price moved past your slippage limit. Raise slippage or try a smaller amount." : anchor ?? JSON.stringify(sim.value.err),
     logs: logs.slice(-10),
   };
@@ -239,10 +241,12 @@ export async function buildTrade(req: TradeRequest): Promise<TradeBuild> {
 
 export type Balances = { sol: number; usdc: number; stock: number; token: number };
 
-export async function balances(wallet: string, pool: string): Promise<Balances> {
+export async function balances(wallet: string, pool: string, fresh = false): Promise<Balances> {
   const owner = new PublicKey(wallet);
   const ctx = await poolCtx(pool);
-  return cached(`bal:${wallet}:${pool}`, 4000, async () => {
+  const key = `bal:${wallet}:${pool}`;
+  if (fresh) dropCache(key);
+  return cached(key, 4000, async () => {
     const [lamports, classic, t22] = await Promise.all([
       connection.getBalance(owner),
       connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
@@ -258,7 +262,7 @@ export async function balances(wallet: string, pool: string): Promise<Balances> 
 
 // ---- claim trading fees ----
 
-export type ClaimBuild = { tx: string; lastValidBlockHeight: number; claims: string[]; simulation: { ok: boolean; error: string | null; logs: string[] } };
+export type ClaimBuild = { tx: string; lastValidBlockHeight: number; claims: string[]; simulation: { ok: boolean; units: number | null; error: string | null; logs: string[] } };
 
 export async function buildClaim(poolAddress: string, walletAddress: string): Promise<ClaimBuild> {
   const wallet = new PublicKey(walletAddress);

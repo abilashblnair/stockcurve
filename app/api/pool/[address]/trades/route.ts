@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ addr
   const { address } = await params;
   try {
     new PublicKey(address);
-    return NextResponse.json(await recentTrades(address));
+    return NextResponse.json(await recentTrades(address, 20, req.nextUrl.searchParams.get("fresh") === "1"));
   } catch (e) {
     return fail(e, 502);
   }

@@ -10,7 +10,7 @@ import { STOCKS } from "@/lib/stocks";
 import type { LaunchPreview } from "@/lib/server/launch";
 import type { StockInfo } from "@/lib/server/stockInfo";
 import { amount, bps, duration, pct, short, tiny, usd } from "@/lib/format";
-import { signSendConfirm } from "@/lib/client/send";
+import { friendlyError, signSendConfirm } from "@/lib/client/send";
 import { CurveChart, FeeChart } from "./Charts";
 import WalletButton from "./WalletButton";
 
@@ -40,6 +40,8 @@ export default function Builder() {
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
   const [errorLogs, setErrorLogs] = useState<string[]>([]);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<string | null>(null);
   const [ack, setAck] = useState(false);
   const [waited, setWaited] = useState(0);
   const seq = useRef(0);
@@ -60,8 +62,16 @@ export default function Builder() {
     const t = setTimeout(() => {
       fetch("/api/preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(s) })
         .then((r) => r.json())
-        .then((j) => { if (id === seq.current) setPreview(j); })
-        .catch(() => {})
+        .then((j) => {
+          if (id !== seq.current) return;
+          if (!j || typeof j !== "object" || !Array.isArray(j.problems)) {
+            setPreviewError(typeof j?.error === "string" ? j.error : "Preview failed. Change a setting to try again.");
+            return;
+          }
+          setPreviewError(null);
+          setPreview(j);
+        })
+        .catch(() => { if (id === seq.current) setPreviewError("Could not reach the preview. Change a setting to try again."); })
         .finally(() => { if (id === seq.current) setLoading(false); });
     }, 300);
     return () => clearTimeout(t);
@@ -78,18 +88,20 @@ export default function Builder() {
     if (token.customUri && !/^https:\/\//.test(token.customUri)) out.push("Metadata link must be https.");
     return out;
   }, [token]);
-  const warnings = useMemo(() => {
+  const localWarnings = useMemo(() => {
     const w: string[] = [];
     if (stock?.permanentDelegate) w.push(`The ${stock.symbol} issuer holds a permanent delegate: it can move ${stock.symbol} out of any account, including this pool's reserve.`);
     if (stock?.nextMultiplierAt) w.push(`${stock.symbol} has a corporate action scheduled (multiplier ${stock.multiplier} → ${stock.nextMultiplier}). USD values shift when it applies.`);
     return w;
   }, [stock]);
-  const canLaunch = !!preview?.ok && tokenProblems.length === 0 && connected && !!signTransaction && !busy && (warnings.length === 0 || ack);
+  const warnings = Array.isArray(preview?.warnings) ? preview.warnings : localWarnings;
+  const canLaunch = !!preview?.ok && !previewError && tokenProblems.length === 0 && connected && !!signTransaction && !busy && (warnings.length === 0 || ack);
 
   async function launch() {
     if (!publicKey || !signTransaction || !preview?.ok) return;
     setError(null);
     setErrorLogs([]);
+    setPreflight(null);
     setWaited(0);
     try {
       let uri = token.customUri.trim();
@@ -113,10 +125,11 @@ export default function Builder() {
         body: JSON.stringify({ settings: s, wallet: publicKey.toBase58(), config: config.publicKey.toBase58(), baseMint: baseMint.publicKey.toBase58(), name: token.name, symbol: token.symbol, uri }),
       }).then((r) => r.json());
       if (b.error) throw new Error(b.error);
-      if (!b.simulation.ok) {
-        setErrorLogs(b.simulation.logs ?? []);
-        throw new Error(`Simulation failed: ${b.simulation.error}`);
+      if (!b.simulation?.ok) {
+        setErrorLogs(b.simulation?.logs ?? []);
+        throw new Error(b.simulation?.error ? `Simulation failed: ${b.simulation.error}` : "Simulation failed.");
       }
+      setPreflight(b.simulation.units ? `Simulation passed (${Number(b.simulation.units).toLocaleString()} compute units). Opening your wallet.` : "Simulation passed. Opening your wallet.");
 
       setStep("sign");
       const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight, [config, baseMint], (stage, sec) => {
@@ -132,8 +145,8 @@ export default function Builder() {
       ]);
       router.push(`/pool/${b.pool}?launched=${sig}`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(/reject|denied|cancel/i.test(msg) ? "Cancelled in the wallet. Nothing was sent." : msg);
+      setPreflight(null);
+      setError(friendlyError(e));
       setStep("idle");
     }
   }
@@ -330,8 +343,13 @@ export default function Builder() {
               </div>
               <CurveChart points={c.points} supply={c.totalSupply} usdPerStock={up} stockSymbol={meta.symbol} />
             </>
+          ) : previewError && !preview ? (
+            <div className="note note-bad">{previewError}</div>
           ) : (
-            <div className="skeleton" style={{ height: 260 }} />
+            <div className="stack-sm">
+              <div className="skeleton" style={{ height: 260 }} />
+              <span className="tiny muted">Computing the curve with Meteora&apos;s maths…</span>
+            </div>
           )}
 
           {f && (
@@ -363,7 +381,8 @@ export default function Builder() {
             </div>
           )}
 
-          {!!preview?.problems.length && (
+          {previewError && preview && <div className="note note-bad">{previewError} The numbers above may be a moment old.</div>}
+          {!!preview?.problems?.length && (
             <div className="note note-bad"><strong>Fix before launching</strong><ul>{preview.problems.map((p) => <li key={p}>{p}</li>)}</ul></div>
           )}
           {tokenProblems.length > 0 && preview?.ok && (
@@ -383,6 +402,7 @@ export default function Builder() {
               {busy ? STEP_LABEL[step as Exclude<Step, "idle">] + (step === "confirm" && waited > 3 ? ` (${waited}s)` : "…") : `Create pool quoted in ${meta.symbol}`}
             </button>
           )}
+          {preflight && busy && <div className="note note-ok tiny">{preflight}</div>}
           {busy && (
             <ol className="small" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 2 }}>
               {(["metadata", "build", "sign", "confirm"] as const).filter((k) => k !== "metadata" || !token.customUri).map((k) => {
@@ -399,7 +419,7 @@ export default function Builder() {
             </div>
           )}
           <p className="tiny muted" style={{ margin: 0 }}>
-            One transaction creates the config and the pool{publicKey ? <> from <span className="mono">{short(publicKey.toBase58())}</span></> : null}. Costs about 0.04 SOL in rent and fees. It is simulated before your wallet opens. <Link href="/how-it-works">How the config works</Link>
+            One transaction creates the config and the pool{publicKey ? <> from <span className="mono">{short(publicKey.toBase58())}</span></> : null}. Costs about 0.03 SOL in rent and fees. It is simulated on mainnet before your wallet opens. <Link href="/how-it-works">How the config works</Link>
           </p>
         </div>
       </aside>

@@ -32,7 +32,7 @@ export default function HowItWorks() {
           <p>When the reserve reaches the threshold, the keeper migrates the pool to DAMM v2: the stock reserve and the paired share of supply become permanent liquidity. By default 100% of that LP is permanently locked.</p>
         </Q>
         <Q title="One transaction, simulated first">
-          <p>The browser generates two fresh keys (for the config and the token mint), the server builds a single transaction that creates both the config and the pool, and simulates it against mainnet. Only if the simulation passes does your wallet open. Your wallet pays rent and fees (about 0.04 SOL) and becomes the config owner, fee claimer and creator.</p>
+          <p>The browser generates two fresh keys (for the config and the token mint), the server builds a single transaction that creates both the config and the pool, and simulates it against mainnet. Only if the simulation passes does your wallet open. Your wallet pays rent and fees (about 0.03 SOL) and becomes the config owner, fee claimer and creator.</p>
           <p>Token metadata is written as immutable, so the name, ticker and links you choose are permanent.</p>
         </Q>
         <Q title="What the monitor tracks">

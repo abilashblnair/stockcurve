@@ -10,6 +10,8 @@ import { stockInfo, type StockInfo } from "./stockInfo.ts";
 export type LaunchPreview = {
   ok: boolean;
   problems: string[];
+  /** Equity risks the UI makes a human tick. Not hard failures; an agent should read them before launch. */
+  warnings: string[];
   stock: StockInfo | null;
   usdPerStock: number | null;
   curve: CurveModel | null;
@@ -18,15 +20,27 @@ export type LaunchPreview = {
   graduationFdvUsd: number | null;
 };
 
+function equityWarnings(stock: StockInfo | null): string[] {
+  if (!stock) return [];
+  const w: string[] = [];
+  if (stock.permanentDelegate) w.push(`The ${stock.symbol} issuer holds a permanent delegate: it can move ${stock.symbol} out of any account, including this pool's reserve.`);
+  if (stock.nextMultiplierAt) w.push(`${stock.symbol} has a corporate action scheduled (multiplier ${stock.multiplier} → ${stock.nextMultiplier}). USD values shift when it applies.`);
+  return w;
+}
+
+function previewFail(problems: string[], stock: StockInfo | null = null, usdPerStock: number | null = null): LaunchPreview {
+  return { ok: false, problems, warnings: equityWarnings(stock), stock, usdPerStock, curve: null, fees: null, startFdvUsd: null, graduationFdvUsd: null };
+}
+
 export async function previewLaunch(s: LaunchSettings): Promise<LaunchPreview> {
   const stock = await stockInfo(s.stockMint);
   const problems = checkSettings(s);
-  if (!stock) return { ok: false, problems: ["Pick a supported stock."], stock: null, usdPerStock: null, curve: null, fees: null, startFdvUsd: null, graduationFdvUsd: null };
+  if (!stock) return previewFail(["Pick a supported stock."]);
   if (!stock.badge) problems.push(`${stock.symbol} has no DBC token badge, so it cannot be a quote token.`);
   if (stock.paused) problems.push(`${stock.symbol} transfers are paused by the issuer right now.`);
   if (stock.usd === null) problems.push(`No live price for ${stock.symbol}; graduation cannot be converted from USD.`);
   const usdPerStock = stock.usd !== null ? stock.usd * stock.multiplier : null;
-  if (problems.length || usdPerStock === null) return { ok: false, problems, stock, usdPerStock, curve: null, fees: null, startFdvUsd: null, graduationFdvUsd: null };
+  if (problems.length || usdPerStock === null) return previewFail(problems, stock, usdPerStock);
 
   try {
     const cp: any = toConfigParameters(s, { decimals: stock.decimals, usd: stock.usd!, multiplier: stock.multiplier });
@@ -41,6 +55,7 @@ export async function previewLaunch(s: LaunchSettings): Promise<LaunchPreview> {
     return {
       ok: problems.length === 0,
       problems,
+      warnings: equityWarnings(stock),
       stock,
       usdPerStock,
       curve,
@@ -50,7 +65,7 @@ export async function previewLaunch(s: LaunchSettings): Promise<LaunchPreview> {
     };
   } catch (e) {
     problems.push(e instanceof Error ? e.message : String(e));
-    return { ok: false, problems, stock, usdPerStock, curve: null, fees: null, startFdvUsd: null, graduationFdvUsd: null };
+    return previewFail(problems, stock, usdPerStock);
   }
 }
 
@@ -133,7 +148,7 @@ export async function buildLaunch(req: BuildRequest): Promise<BuildResult> {
     simulation: {
       ok: !sim.value.err,
       units: sim.value.unitsConsumed ?? null,
-      error: sim.value.err ? (insufficient || sim.value.err === "AccountNotFound" ? "Not enough SOL for rent and fees (about 0.04 SOL needed)." : anchorErr ?? JSON.stringify(sim.value.err)) : null,
+      error: sim.value.err ? (insufficient || sim.value.err === "AccountNotFound" ? "Not enough SOL for rent and fees (about 0.03 SOL needed)." : anchorErr ?? JSON.stringify(sim.value.err)) : null,
       logs: sim.value.err ? logs.slice(-12) : [],
     },
   };

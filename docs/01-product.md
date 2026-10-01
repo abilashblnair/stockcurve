@@ -26,7 +26,7 @@ That leaves three gaps:
 3. **Trade** (pool page): buy or sell with SOL, USDC or the stock. Jupiter routes SOL/USDC through the stock into the curve (and into DAMM v2 after graduation). For brand-new pools Jupiter has not indexed yet, a direct curve swap is available. Every trade is simulated first.
 4. **Monitor** (pool page): price, market cap, reserve, progress to graduation, bonding curve with the pool's position, a candlestick price chart in USD (GeckoTerminal candles, following the token to its DAMM v2 pool after graduation, or candles Stockcurve builds from the pool's own swap events), base fee now and time left in the opening window, fees earned per party, backing, recent trades, issuer controls, post-graduation LP terms.
 5. **Claim**: the pool's fee claimer and creator see a Claim button for fees earned in the stock.
-6. **Index** (`/pools`): every DBC pool on Solana quoted in a supported stock, filterable by stock, status, "Launched here" and "Created by me".
+6. **Index** (`/pools`): every DBC pool on Solana quoted in a supported stock, filterable by stock, bonding or graduated, "Launched here" and "Created by me". Each row shows progress toward graduation and the base fee in the quote stock. The page also shows issuer controls shared by that stock (pause, permanent delegate, a scheduled corporate action). This is the ecosystem evidence: stock-as-quote already exists at scale, and this is the monitor for it.
 7. **Agent API**: every action is an HTTP endpoint that returns an unsigned, simulated transaction. `scripts/agent.ts` drives the whole lifecycle from a keypair.
 
 ## Why Solana, why Meteora DBC

@@ -42,15 +42,17 @@ export default function TradePanel({
   const [bal, setBal] = useState<Balances | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorLogs, setErrorLogs] = useState<string[]>([]);
+  const [preflight, setPreflight] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const seq = useRef(0);
 
   const assetLabel = (a: Asset) => (a === "STOCK" ? stockSymbol : a);
   const inputBalance = bal ? (side === "sell" ? bal.token : asset === "SOL" ? bal.sol : asset === "USDC" ? bal.usdc : bal.stock) : null;
 
-  const loadBalances = useCallback(() => {
+  const loadBalances = useCallback((fresh = false) => {
     if (!publicKey) return setBal(null);
-    fetch(`/api/balances?wallet=${publicKey.toBase58()}&pool=${pool}`, { cache: "no-store" })
+    fetch(`/api/balances?wallet=${publicKey.toBase58()}&pool=${pool}${fresh ? "&fresh=1" : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => !j.error && setBal(j))
       .catch(() => {});
@@ -94,6 +96,8 @@ export default function TradePanel({
   async function submit() {
     if (!publicKey || !signTransaction) return;
     setError(null);
+    setErrorLogs([]);
+    setPreflight(null);
     setDone(null);
     try {
       setBusy("Building and simulating…");
@@ -103,16 +107,21 @@ export default function TradePanel({
         body: JSON.stringify({ pool, side, asset, amount, slippageBps: slippage, route: direct ? "dbc" : "auto", wallet: publicKey.toBase58() }),
       }).then((r) => r.json());
       if (b.error) throw new Error(b.error);
-      if (!b.simulation.ok) throw new Error(b.simulation.error ?? "Simulation failed.");
+      if (!b.simulation?.ok) {
+        setErrorLogs((b.simulation?.logs ?? []).slice(-6));
+        throw new Error(b.simulation?.error ?? "Simulation failed.");
+      }
+      setPreflight("Simulation passed. Confirm in your wallet.");
       setBusy("Confirm in your wallet…");
       const sig = await signSendConfirm(connection, signTransaction, b.tx, b.lastValidBlockHeight, [], (stage, sec) =>
         setBusy(stage === "signing" ? "Confirm in your wallet…" : stage === "sending" ? "Sending…" : `Confirming on Solana… ${sec ?? 0}s`),
       );
       setBusy(null);
+      setPreflight(null);
       setDone(sig);
-      loadBalances();
+      loadBalances(true);
       onTraded();
-      setTimeout(loadBalances, 2500);
+      setTimeout(() => loadBalances(true), 2500);
     } catch (e) {
       setBusy(null);
       setError(friendlyError(e));
@@ -165,7 +174,7 @@ export default function TradePanel({
         </div>
       </div>
 
-      <div className="note" style={{ minHeight: 64 }}>
+      <div className={`note ${quoteError ? "note-bad" : ""}`} style={{ minHeight: 64 }}>
         {quoting && !quote ? (
           <span className="muted">Getting a quote…</span>
         ) : quote ? (
@@ -181,6 +190,12 @@ export default function TradePanel({
           <span className="muted small">Enter an amount.</span>
         )}
       </div>
+
+      {quoteError && /no route|has not indexed|Jupiter/i.test(quoteError) && asset !== "STOCK" && !isMigrated && (
+        <button type="button" className="btn btn-block" onClick={() => { setAsset("STOCK"); setDirect(true); }}>
+          Switch to {stockSymbol} and swap on the curve
+        </button>
+      )}
 
       {!isMigrated && feeNowBps >= 500 && (
         <div className="note note-warn tiny">The opening fee is {bps(feeNowBps)} right now and is already included in the quote. It falls over the opening window.</div>
@@ -199,7 +214,13 @@ export default function TradePanel({
           {busy ?? (insufficient ? `Not enough ${side === "sell" ? tokenSymbol : assetLabel(asset)}` : `${side === "buy" ? "Buy" : "Sell"} ${tokenSymbol}`)}
         </button>
       )}
-      {error && <div className="note note-bad small">{error}</div>}
+      {preflight && !error && <div className="note note-ok tiny">{preflight}</div>}
+      {error && (
+        <div className="note note-bad small">
+          {error}
+          {errorLogs.length > 0 && <pre className="mono tiny" style={{ whiteSpace: "pre-wrap", margin: "8px 0 0" }}>{errorLogs.join("\n")}</pre>}
+        </div>
+      )}
       {done && (
         <div className="note note-ok small">
           Done. <a href={solscan("tx", done)} target="_blank" rel="noreferrer">View transaction</a>

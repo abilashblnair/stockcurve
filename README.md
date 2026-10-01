@@ -2,7 +2,7 @@
 
 Configure, launch, trade and monitor Meteora Dynamic Bonding Curve pools whose quote token is a tokenized stock (xStocks: NVDAx, SPYx, AAPLx...).
 
-**Live:** https://stockcurve.pewcake.fun · **Docs:** [docs/README.md](docs/README.md) (product, config maths, architecture, evidence, operations, FAQ, demo script, roadmap, agent API)
+**Live:** https://stockcurve.pewcake.fun · **Docs:** [docs/README.md](docs/README.md) (product, config maths, architecture, evidence, operations, FAQ, demo script, [hackathon demo](docs/10-hackathon-demo.md), [agent API for judges](docs/11-agent-for-judges.md), roadmap, agent API)
 
 ## App
 
@@ -13,7 +13,7 @@ Configure, launch, trade and monitor Meteora Dynamic Bonding Curve pools whose q
 | `/pools` | Index of every DBC pool quoted in a supported stock, scanned from the program on mainnet and cached to `.data/` |
 | `/how-it-works` | Why each setting exists |
 
-Pool pages also have a buy/sell box (SOL, USDC or the stock; Jupiter first, direct curve fallback), a fee claim button for the pool owner, and a candlestick price chart (GeckoTerminal candles from the browser, following graduated tokens to DAMM v2, or candles from the pool's own swaps). `npm run agent` drives the same API from a keypair (see docs/09-agent-api.md).
+Pool pages also have a buy/sell box (SOL, USDC or the stock; Jupiter first, direct curve fallback), a fee claim button for the pool owner, and a candlestick price chart (GeckoTerminal candles from the browser, following graduated tokens to DAMM v2, or candles from the pool's own swaps). `npm run agent:demo` walks the same API in the terminal (dry run). `npm run agent` drives one action from a keypair (see [docs/11-agent-for-judges.md](docs/11-agent-for-judges.md) and [docs/09-agent-api.md](docs/09-agent-api.md)).
 
 API: `/api/stocks`, `/api/preview`, `/api/build`, `/api/metadata` (+ `/meta/[id]`), `/api/pool/[address]`, `/api/pools`, `/api/rpc` (allow-listed proxy so the RPC key stays server-side).
 
@@ -40,6 +40,7 @@ Token-2022) as its quote token, with an equity-tuned config, on mainnet?
 | 1 probe | `npm run probe` (`-- --all` for every xStock) | RPC | no |
 | 2 simulate | `npm run simulate -- NVDAx` | RPC | no (simulation, sig verify off) |
 | 3 live | `KEYPAIR=keys/test-wallet.json npm run live -- NVDAx` | test wallet | dry run by default; `--send` broadcasts |
+| agent demo | `STOCKCURVE_URL=http://127.0.0.1:3120 npm run agent:demo` | dev server | dry run; `STOCKCURVE_SEND=1` plus `KEYPAIR` broadcasts the launch only |
 
 `.env` needs `SOLANA_RPC` (copied from sounding/.env.local). `keys/` and `runs/` are gitignored.
 

@@ -1,5 +1,7 @@
 # 07 · Test plan and demo script
 
+The checklist and video script below are the record of 15 September 2026. For the October 2026 Superteam India / Colosseum demo, follow [10-hackathon-demo.md](10-hackathon-demo.md). PRINT, GPUPOOR, GOOB and FETCH have already had their partner and creator fees claimed, so **Claim** on those pools stays disabled until a new trade. The opening-auction window on those pools has also finished (steady fee 1%).
+
 ## This evening's test (budget ≈ $3–5)
 
 Wallet needs: **0.05 SOL** (launch 0.0266 + trades + fees). NVDAx is optional now: you can buy with SOL.
