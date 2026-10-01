@@ -108,7 +108,7 @@ Priority fees: transactions Stockcurve builds use Helius's `getPriorityFeeEstima
 
 ### Index
 
-Every 30 minutes: for each stock, `getProgramAccounts` on DBC configs with `quote_mint` = stock (offset 8, size 1048), then pools per config (config at offset 72), then Metaplex names 100 at a time. ~3 RPC calls per second, persisted to `/data/pool-index.json`. `POST /api/pools/track` adds a single pool immediately after a launch.
+Every 30 minutes: for each stock, `getProgramAccounts` on DBC configs with `quote_mint` = stock (offset 8, size 1048), then pools per config (config at offset 72), then Metaplex names 100 at a time. ~3 RPC calls per second. Each stock is published as it finishes, so a cold page fills in instead of waiting for the whole pass. The snapshot is persisted to `/data/pool-index.json`, including the fee schedule so timestamp pools can show the base fee in force when the index is served. `POST /api/pools/track` adds a single pool immediately after a launch. A pass that times out keeps the pools already found and sets `error`; the next try waits 20 seconds. A pass with no progress for 90 seconds is treated as stuck and started again.
 
 ## API reference
 
@@ -129,7 +129,7 @@ All responses are JSON. Errors: `{ "error": "message" }` with a 4xx/5xx status. 
 | POST | `/api/trade/build` | quote body + `wallet` | quote + `{ tx, lastValidBlockHeight, simulation: { ok, units, error, logs } }` |
 | GET | `/api/balances` | `?wallet=&pool=` | `{ sol, usdc, stock, token }` |
 | POST | `/api/claim` | `{ pool, wallet }` | `{ tx, claims[], lastValidBlockHeight, simulation: { ok, units, error, logs } }` |
-| GET | `/api/pools` | | `{ pools[], updatedAt, scanning, progress }` |
+| GET | `/api/pools` | | `{ pools[] (feeNowBps, feeStartBps, feeEndBps, feeSchedule, launchedHere), updatedAt, scanning, progress, error }` |
 | POST | `/api/pools/track` | `{ pool }` | the indexed pool |
 | POST | `/api/send` | `{ tx }` (signed, base64) | `{ signature, accepted }`: broadcast to Helius + public RPC |
 | POST | `/api/rpc` | JSON-RPC | proxied to Helius (allow-listed methods only) |

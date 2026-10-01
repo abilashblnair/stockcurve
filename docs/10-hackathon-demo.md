@@ -55,13 +55,24 @@ Same page, card **Fees, paid in NVDAx**.
 
 ## 3:40 — Index and originality (40s)
 
-Screen: **Pools** (`/pools`).
+Screen: **Pools** (`/pools`). This is the ecosystem-impact page: one index of every DBC pool on Solana quoted in a supported xStock, not a list of our own launches.
 
-Say, while showing the filters: "Every DBC pool on Solana quoted in a supported xStock is indexed from the program. Filter **Launched here** for pools that came through this desk, including the one we just made. **Created by me** is this wallet."
+Read the line under the heading: pool count, how many **graduated to DAMM v2**, how many **launched here**, how many quote stocks. Do not quote an old number. Say: "The reserve and the trading fees on every one of these are the stock."
 
-Read the live total in the table footer. Do not quote an old number.
+Point at the chips under that line. **Transfers live** (or a red paused chip naming the stock), **Permanent delegate on every quote stock**, and a corporate-action chip when one is scheduled. Say: "The monitor is not only tickers. The issuer can pause the stock, and the delegate can move it out of the reserve. That risk is on the quote, so it applies to the whole row, not to one pool."
 
-Then the line judges need: "Stock as the quote token is not new. Hundreds of these pools already exist, and this page is the evidence. What is new is the equity-tuned config (opening-auction fee, dollar graduation above the keeper minimum, liquidity locked by default), a form that previews Meteora's own maths and simulates before the wallet opens, the equity risks on the launch and the pool page, and this cross-pool monitor. The same actions are HTTP endpoints an agent can sign. We are not claiming to have invented the curve."
+Filters, left to right, each with a count:
+
+1. Quote stock: **All**, then NVDAx, SPYx, and the rest. Click one. The status counts on the right change to that stock.
+2. **Launched here** — pools whose metadata is hosted by this desk, with a green **Stockcurve** chip. Includes the one just launched, after it is tracked.
+3. **Bonding** / **Graduated** — still on the curve, or migrated. Graduated rows say **DAMM** in the Fee column.
+4. **Created by me** — the connected wallet, matched to the pool creator. With no wallet it asks you to connect.
+
+On a row: **Raised** is the stock in the curve (dollars when the price has loaded), **Progress** is how close that is to graduation, **Fee** is the base fee in force now, paid in the quote stock. An opening auction shows `25% → 1%` while the window is still running. Hover the fee for the schedule.
+
+Then the line judges need: "Stock as the quote token is not new. This page is the evidence, and the count is whatever it says today. What is new is the equity-tuned config (opening-auction fee, dollar graduation above the keeper minimum, liquidity locked by default), a form that previews Meteora's own maths and simulates before the wallet opens, the equity risks on the launch and on this index, and the agent API for the same actions. We are not claiming to have invented the curve."
+
+If the table says it is still reading configs, that is a cold index: a public RPC takes several minutes, and rows appear as each stock finishes. Open a known pool address in the address box rather than waiting. A red note is an RPC failure; **Retry** starts another read. Pools already found stay on screen.
 
 ## 4:20 — Close (15s)
 

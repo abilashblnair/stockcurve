@@ -113,29 +113,37 @@ export function feeBpsAt(baseFee: BaseFeeLike, elapsedSec: number): number {
   return toBps(num);
 }
 
-export function feeModel(baseFee: BaseFeeLike, creatorTradingFeePercentage: number, dynamic: boolean): FeeModel {
+/** Schedule only: no chart samples. The index uses this once per pool. */
+export function feeSummary(baseFee: BaseFeeLike): Pick<FeeModel, "startBps" | "endBps" | "durationSec" | "schedule"> {
   const periods = baseFee.firstFactor;
   const freq = Number(baseFee.secondFactor.toString());
   const scheduler = baseFee.baseFeeMode <= 1 && periods > 0 && freq > 0;
   const durationSec = scheduler ? periods * freq : 0;
+  return {
+    startBps: feeBpsAt(baseFee, 0),
+    endBps: feeBpsAt(baseFee, durationSec),
+    durationSec,
+    schedule: baseFee.baseFeeMode > 1 ? "rate-limit" : durationSec > 0 ? "decay" : "flat",
+  };
+}
+
+export function feeModel(baseFee: BaseFeeLike, creatorTradingFeePercentage: number, dynamic: boolean): FeeModel {
+  const summary = feeSummary(baseFee);
   const points: FeePoint[] = [];
   const steps = 60;
-  const shown = durationSec || 3600;
+  const shown = summary.durationSec || 3600;
   for (let i = 0; i <= steps; i++) {
     const t = Math.round((shown * i) / steps);
     points.push({ t, bps: feeBpsAt(baseFee, t) });
   }
   const rest = 100 - PROTOCOL_FEE_PERCENT;
   return {
-    startBps: feeBpsAt(baseFee, 0),
-    endBps: feeBpsAt(baseFee, durationSec > 0 ? durationSec : 0),
-    durationSec,
+    ...summary,
     points,
     protocolPct: PROTOCOL_FEE_PERCENT,
     creatorPct: (rest * creatorTradingFeePercentage) / 100,
     partnerPct: (rest * (100 - creatorTradingFeePercentage)) / 100,
     dynamic,
-    schedule: baseFee.baseFeeMode > 1 ? "rate-limit" : durationSec > 0 ? "decay" : "flat",
   };
 }
 

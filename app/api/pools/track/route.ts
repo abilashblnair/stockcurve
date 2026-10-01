@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PublicKey } from "@solana/web3.js";
-import { trackPool } from "@/lib/server/indexer";
+import { publicPool, trackPool } from "@/lib/server/indexer";
 import { fail, limited } from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     new PublicKey(pool);
     const entry = await trackPool(pool);
     if (!entry) return NextResponse.json({ error: "Not a pool quoted in a supported stock." }, { status: 404 });
-    return NextResponse.json(entry);
+    return NextResponse.json(publicPool(entry));
   } catch (e) {
     return fail(e);
   }

@@ -9,7 +9,7 @@ export default function PoolsPage() {
       <div className="page-head">
         <span className="eyebrow">Pool monitor</span>
         <h1>Every DBC pool priced in a tokenized stock</h1>
-        <p>Indexed straight from the Meteora DBC program on mainnet: configs whose quote token is an xStock, and every pool created under them.</p>
+        <p>The cross-pool view of stock-as-quote launches: every Meteora DBC config whose quote is a supported xStock, and every pool under it. Filter by stock, by bonding or graduated, or to launches from this desk. The reserve, the fee and the issuer&apos;s controls belong to that stock.</p>
       </div>
       <PoolTable />
     </div>
